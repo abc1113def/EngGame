@@ -135,7 +135,7 @@ kbd {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
 }
 .topbar {
   height: 46px;
@@ -251,6 +251,15 @@ kbd {
   .tb-views kbd,
   .seg.small {
     display: none;
+  }
+}
+@media (max-width: 700px) {
+  .menu-grid,
+  .mode-cards {
+    grid-template-columns: 1fr;
+  }
+  .menu {
+    padding: 16px;
   }
 }
 @media (max-width: 900px) {
