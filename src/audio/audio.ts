@@ -169,6 +169,98 @@ class AudioEngine {
         gg.gain.setTargetAtTime(k * 0.35 + (s.ac.onGround ? 0 : Math.min(0.2, s.ac.ias / 900)), ctx.currentTime, 0.2);
       };
     });
+    // ===== Cessna 172 =====
+    // поршневой двигатель: частота вспышек = об/мин / 60 × 2 (4 цилиндра)
+    mk('piston', (g) => {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      const o2 = ctx.createOscillator();
+      o2.type = 'square';
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.Q.value = 1.4;
+      const og = ctx.createGain();
+      og.gain.value = 0.6;
+      const o2g = ctx.createGain();
+      o2g.gain.value = 0.25;
+      o.connect(og).connect(lp);
+      o2.connect(o2g).connect(lp);
+      const n = this.noiseSrc();
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 0.8;
+      const ng = ctx.createGain();
+      n.connect(bp).connect(ng).connect(g);
+      lp.connect(g);
+      o.start();
+      o2.start();
+      return (s, gg) => {
+        if (s.type !== 'c172') {
+          gg.gain.setTargetAtTime(0, ctx.currentTime, 0.1);
+          return;
+        }
+        const rpm = s.c.rpm;
+        const fire = Math.max(1, (rpm / 60) * 2);
+        o.frequency.setTargetAtTime(fire, ctx.currentTime, 0.05);
+        o2.frequency.setTargetAtTime(fire / 2, ctx.currentTime, 0.05);
+        lp.frequency.setTargetAtTime(180 + rpm * 0.35, ctx.currentTime, 0.1);
+        bp.frequency.setTargetAtTime(300 + rpm * 0.6, ctx.currentTime, 0.1);
+        ng.gain.setTargetAtTime(s.c.running ? 0.05 + (rpm / 2700) * 0.12 : 0.01, ctx.currentTime, 0.1);
+        const k = s.c.running ? 0.18 + (rpm / 2700) * 0.32 : rpm > 30 ? 0.12 : 0;
+        gg.gain.setTargetAtTime(k, ctx.currentTime, 0.08);
+      };
+    });
+    // стартер
+    mk('starter', (g) => {
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.value = 180;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 900;
+      const am = ctx.createGain();
+      o.connect(lp).connect(am).connect(g);
+      o.start();
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 6;
+      const lfoG = ctx.createGain();
+      lfoG.gain.value = 0.5;
+      lfo.connect(lfoG).connect(am.gain);
+      lfo.start();
+      return (s, gg) => {
+        const on = s.type === 'c172' && s.c.starter;
+        o.frequency.setTargetAtTime(120 + s.c.busV * 4, ctx.currentTime, 0.1);
+        lfo.frequency.setTargetAtTime(Math.max(1, (s.c.rpm / 60) * 2), ctx.currentTime, 0.1);
+        gg.gain.setTargetAtTime(on ? 0.09 : 0, ctx.currentTime, 0.05);
+      };
+    });
+    // сигнализатор сваливания
+    mk('stallhorn', (g) => {
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.value = 1580;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1600;
+      bp.Q.value = 3;
+      o.connect(bp).connect(g);
+      o.start();
+      return (s, gg) => gg.gain.setTargetAtTime(s.type === 'c172' && s.c.stallHorn && s.c.busV > 0 ? 0.12 : 0, ctx.currentTime, 0.03);
+    });
+    // гироскопы и вентилятор авионики
+    mk('gyro', (g) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      const og = ctx.createGain();
+      og.gain.value = 0.5;
+      o.connect(og).connect(g);
+      o.start();
+      return (s, gg) => {
+        const on = s.type === 'c172' ? Math.max(s.c.aiSpin, s.c.busV > 18 ? 0.4 : 0) : 0;
+        o.frequency.setTargetAtTime(600 + on * 1800, ctx.currentTime, 0.5);
+        gg.gain.setTargetAtTime(on * 0.006, ctx.currentTime, 0.4);
+      };
+    });
     // электронасос жёлтой системы
     mk('ypump', (g) => {
       const o = ctx.createOscillator();

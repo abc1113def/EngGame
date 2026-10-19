@@ -18,8 +18,8 @@ export function sceneFor(g: AirportGeo) {
 }
 
 export function viewCfg(s: SimState, big: boolean): ViewCfg {
-  if (s.type === 'c172') return { hfov: big ? 70 : 80, eye: 1.75, eyeFwd: 0.5, look: big ? 3 : 2, guide: getSettings().guide !== false ? guideFor(s) : null };
-  return { hfov: 62, eye: 5.6, eyeFwd: 17, look: 5 };
+  if (s.type === 'c172') return { hfov: big ? 58 : 62, eye: 1.75, eyeFwd: 0.5, look: big ? 3 : 2, guide: getSettings().guide !== false ? guideFor(s) : null };
+  return { hfov: 56, eye: 5.6, eyeFwd: 17, look: 5 };
 }
 
 type Overlay = (ctx: CanvasRenderingContext2D, s: SimState, W: number, H: number, cam: ReturnType<typeof drawWorld>) => void;
@@ -260,21 +260,21 @@ export function c172Nose(ctx: CanvasRenderingContext2D, s: SimState, W: number, 
 
 function hudC172(ctx: CanvasRenderingContext2D, s: SimState, W: number, H: number, cam: ReturnType<typeof drawWorld>) {
   c172Nose(ctx, s, W, H);
-  // стойки
+  // стойки и верхняя кромка остекления
   ctx.fillStyle = '#2a2d31';
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(110, 0);
-  ctx.lineTo(40, H);
+  ctx.lineTo(46, 0);
+  ctx.lineTo(16, H);
   ctx.lineTo(0, H);
   ctx.fill();
   ctx.beginPath();
   ctx.moveTo(W, 0);
-  ctx.lineTo(W - 110, 0);
-  ctx.lineTo(W - 40, H);
+  ctx.lineTo(W - 46, 0);
+  ctx.lineTo(W - 16, H);
   ctx.lineTo(W, H);
   ctx.fill();
-  ctx.fillRect(0, 0, W, 34);
+  ctx.fillRect(0, 0, W, 22);
   hudAttitude(ctx, s, cam);
   const c = s.c;
   const lines = [
@@ -286,8 +286,8 @@ function hudC172(ctx: CanvasRenderingContext2D, s: SimState, W: number, H: numbe
     `FLAPS ${Math.round(c.flaps)}°  TRIM ${c.trim > 0 ? '+' : ''}${c.trim.toFixed(2)}`,
   ];
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(130, 50, 250, lines.length * 24 + 18);
-  lines.forEach((l, i) => txt(ctx, l, 144, 76 + i * 24, 17, HUD, 'left'));
+  ctx.fillRect(70, 40, 250, lines.length * 24 + 18);
+  lines.forEach((l, i) => txt(ctx, l, 84, 66 + i * 24, 17, HUD, 'left'));
   if (c.stallHorn && Math.floor(s.t * 4) % 2 === 0) txt(ctx, 'STALL', W / 2, 120, 34, '#ff4d4d');
 }
 

@@ -171,7 +171,14 @@ export function App() {
           }
           break;
         case 'hint': {
-          const m = e.key === 'trimNoHyd' ? UI.hintTrimNoHyd : e.key === 'autobrkNoArm' ? UI.hintAutobrk : UI.hintAp;
+          const m =
+            e.key === 'trimNoHyd'
+              ? UI.hintTrimNoHyd
+              : e.key === 'autobrkNoArm'
+                ? UI.hintAutobrk
+                : e.key === 'cApNo'
+                  ? { ru: 'KAP 140 включается только в воздухе при включённой AVIONICS BUS 2 (после 5-секундного теста).', en: 'The KAP 140 engages only airborne with AVIONICS BUS 2 on (after its 5 s self-test).' }
+                  : UI.hintAp;
           uiStore.toast(m, 'warn', 5000);
           break;
         }
@@ -182,7 +189,14 @@ export function App() {
           }
           break;
         case 'apDisc':
-          audio.cavalry();
+          if (s.type === 'c172') audio.crcDing();
+          else audio.cavalry();
+          break;
+        case 'cEngStop':
+          if (s.flags.cAirborne && !s.ac.onGround) uiStore.toast({ ru: 'ДВИГАТЕЛЬ ОСТАНОВИЛСЯ! Скорость планирования 68 уз, выбирайте площадку.', en: 'ENGINE FAILURE! Best glide 68 kt, pick a landing spot.' }, 'pen', 8000);
+          break;
+        case 'cWater':
+          uiStore.toast({ ru: 'В пробе топлива вода! Сливайте отстой ещё.', en: 'Water in the fuel sample! Keep draining.' }, 'warn', 5000);
           break;
         case 'sw':
           if ((e.id === 'SEAT_BELTS' || e.id === 'NO_SMOKING') && s.elec.dcBat) audio.cabinChime();
