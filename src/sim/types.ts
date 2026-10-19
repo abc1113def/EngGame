@@ -17,6 +17,7 @@ export interface Settings {
   volume: number;
   failures: FailureLevel;
   fastAlign: boolean;
+  guide?: boolean;
 }
 
 export type IgnSel = '' | 'A' | 'B' | 'AB';

@@ -412,6 +412,84 @@ sel('WX_SYS', 'ped', 'rotary', 'SYS', 'Метеорадар', 'Weather radar', [
 sel('WX_PWS', 'ped', 'toggle', 'PWS', 'Сигнализация сдвига ветра', 'Predictive windshear', ['OFF', 'AUTO'], 0);
 sel('WX_MODE', 'ped', 'rotary', 'MODE', 'Режим радара', 'Radar mode', ['WX', 'WX+T', 'TURB', 'MAP'], 0);
 
+// ===================== CESSNA 172S =====================
+const C = 'c172' as const;
+sel('C_BAT', C, 'toggle', 'BAT', 'MASTER: аккумулятор', 'MASTER switch: battery (BAT)', ['OFF', 'ON'], 0, {
+  ru: 'Правая половина красного MASTER. Подаёт питание от аккумулятора на шины.',
+  en: 'Right half of the red MASTER switch. Connects the battery to the buses.',
+});
+sel('C_ALT', C, 'toggle', 'ALT', 'MASTER: генератор', 'MASTER switch: alternator (ALT)', ['OFF', 'ON'], 0, {
+  ru: 'Левая половина MASTER. Генератор даёт ток при работающем двигателе. Сброс отказа — OFF, затем ON.',
+  en: 'Left half of MASTER. The alternator charges when the engine runs. To reset a trip: OFF, then ON.',
+});
+sel('C_AVIONICS1', C, 'toggle', 'BUS 1', 'AVIONICS BUS 1', 'Avionics bus 1', ['OFF', 'ON'], 0, {
+  ru: 'Радиостанция COM/NAV. На запуске двигателя — выключено (броски напряжения).',
+  en: 'COM/NAV radio. Keep OFF for engine start (voltage spikes).',
+});
+sel('C_AVIONICS2', C, 'toggle', 'BUS 2', 'AVIONICS BUS 2', 'Avionics bus 2', ['OFF', 'ON'], 0, {
+  ru: 'Ответчик и автопилот.',
+  en: 'Transponder and autopilot.',
+});
+sel('C_MAGS', C, 'rotary', 'MAGNETOS', 'Замок зажигания (магнето)', 'Ignition switch (magnetos)', ['OFF', 'R', 'L', 'BOTH', 'START'], 0, {
+  ru: 'OFF / R / L / BOTH. Держите кнопку START, пока двигатель не запустится (не дольше 10 с).',
+  en: 'OFF / R / L / BOTH. Hold START until the engine fires (max 10 s).',
+});
+sel('C_FUEL_PUMP', C, 'toggle', 'FUEL PUMP', 'Электробензонасос', 'Auxiliary fuel pump', ['OFF', 'ON'], 0, {
+  ru: 'Для заливки (прайминга) перед запуском: насос ON и смесь RICH на 3–5 с.',
+  en: 'For priming before start: pump ON with mixture RICH for 3–5 s.',
+});
+sel('C_BEACON', C, 'toggle', 'BCN', 'Проблесковый маяк', 'Beacon', ['OFF', 'ON'], 0);
+sel('C_LAND', C, 'toggle', 'LAND', 'Посадочная фара', 'Landing light', ['OFF', 'ON'], 0);
+sel('C_TAXI', C, 'toggle', 'TAXI', 'Рулёжная фара', 'Taxi light', ['OFF', 'ON'], 0);
+sel('C_NAV', C, 'toggle', 'NAV', 'АНО', 'Navigation lights', ['OFF', 'ON'], 0);
+sel('C_STROBE', C, 'toggle', 'STROBE', 'Стробы', 'Strobe lights', ['OFF', 'ON'], 0);
+sel('C_PITOT', C, 'toggle', 'PITOT HT', 'Обогрев ПВД', 'Pitot heat', ['OFF', 'ON'], 0);
+sel('C_FUEL_SEL', C, 'rotary', 'FUEL', 'Топливный кран (баки)', 'Fuel selector valve', ['LEFT', 'BOTH', 'RIGHT'], 1, {
+  ru: 'BOTH — на взлёт и посадку. После полёта — LEFT или RIGHT (чтобы топливо не перетекало).',
+  en: 'BOTH for take-off and landing. After flight LEFT or RIGHT (prevents cross-feeding).',
+});
+sel('C_FUEL_SHUTOFF', C, 'toggle', 'FUEL SHUTOFF', 'Перекрывной топливный кран', 'Fuel shutoff valve', ['OFF', 'ON'], 1);
+sel('C_THR', C, 'knob', 'THROTTLE', 'РУД (газ)', 'Throttle', [], 0, {
+  ru: 'Колесо мыши или F1–F4. Для запуска приоткрыть на ¼ дюйма (около 10 %).',
+  en: 'Mouse wheel or F1–F4. Open ¼ inch (about 10 %) for start.',
+});
+sel('C_MIX', C, 'knob', 'MIXTURE', 'Высотный корректор (смесь)', 'Mixture', [], 0, {
+  ru: 'Красная ручка. Вниз до упора — IDLE CUTOFF (останов двигателя), вверх — RICH. Shift+F2/F3.',
+  en: 'Red knob. Fully out = IDLE CUTOFF (stops the engine), fully in = RICH. Shift+F2/F3.',
+});
+sel('C_FLAPS', C, 'lever', 'FLAPS', 'Закрылки', 'Wing flaps', ['0°', '10°', '20°', '30°'], 0, {
+  ru: 'Электрические, нужен MASTER. VFE: 10° — 110 уз, 20–30° — 85 уз. Клавиши F / R.',
+  en: 'Electric, needs MASTER. VFE: 10° 110 kt, 20–30° 85 kt. Keys F / R.',
+});
+sel('C_TRIM', C, 'knob', 'TRIM', 'Колесо триммера руля высоты', 'Elevator trim wheel', [], 0, {
+  ru: 'На взлёт — метка TAKEOFF. В полёте снимайте усилия триммером. Клавиши [ и ].',
+  en: 'Set the TAKEOFF mark for departure. Trim out control forces in flight. Keys [ and ].',
+});
+sel('C_PARK', C, 'toggle', 'PARK BRAKE', 'Стояночный тормоз', 'Parking brake', ['OFF', 'SET'], 1);
+sel('C_XPDR', C, 'rotary', 'XPDR', 'Ответчик', 'Transponder', ['OFF', 'SBY', 'ON', 'ALT'], 0, {
+  ru: 'Код VFR 7000. Перед выездом на ВПП — ALT, после посадки — SBY.',
+  en: 'VFR code 7000. ALT before entering the runway, SBY after landing.',
+});
+sel('C_COM_KNOB', C, 'knob', 'COM', 'Ручка частоты COM', 'COM frequency knob', [], 0, {
+  ru: 'Колесо мыши: внешнее кольцо — МГц, центр — кГц. Меняется резервная частота.',
+  en: 'Wheel: outer ring MHz, centre kHz. Tunes the standby frequency.',
+});
+pb('C_COM_FLIP', C, '⇄', 'Обмен частот COM', 'COM flip-flop', 0, undefined, undefined, undefined, 'pbm');
+sel('C_HDG_BUG', C, 'knob', 'HDG', 'Задатчик курса (метка)', 'Heading bug', [], 0);
+sel('C_DG', C, 'knob', 'PUSH SET', 'Выставка курсового гироскопа', 'Heading indicator adjust', [], 0, {
+  ru: 'Выставьте курс по магнитному компасу (вверху на козырьке).',
+  en: 'Set the heading indicator to the magnetic compass (on top of the glareshield).',
+});
+sel('C_BARO', C, 'knob', 'BARO', 'Кремальера высотомера', 'Altimeter setting knob', [], 0, {
+  ru: 'Установите QNH (дюймы рт. ст.) — высотомер на земле покажет превышение аэродрома 459 фт.',
+  en: 'Set QNH (inHg) — on the ground the altimeter then reads field elevation 459 ft.',
+});
+pb('C_ANN_TEST', C, 'TEST', 'Тест табло', 'Annunciator test', 0, undefined, undefined, undefined, 'pbm');
+pb('C_AP', C, 'AP', 'Автопилот KAP 140', 'Autopilot KAP 140', 0, undefined, undefined, { ru: 'Включение — режим ROL (крылья горизонтально). Выключение — повторное нажатие.', en: 'Engages in ROL (wing leveller). Press again to disconnect.' }, 'pbm');
+pb('C_AP_HDG', C, 'HDG', 'Автопилот: курс по метке', 'Autopilot: heading mode', 0, undefined, undefined, undefined, 'pbm');
+pb('C_AP_ALT', C, 'ALT', 'Автопилот: удержание высоты', 'Autopilot: altitude hold', 0, undefined, undefined, undefined, 'pbm');
+pb('C_LOCK', C, 'CONTROL LOCK', 'Струбцина рулей', 'Control lock', 0, undefined, undefined, { ru: 'Снимите перед полётом! Установите после стоянки.', en: 'Remove before flight! Install after securing.' }, 'pbm');
+
 export const CONTROLS: Record<string, CtlDef> = Object.fromEntries(defs.map((d) => [d.id, d]));
 
 export function defaultSwitches(): Record<string, number> {

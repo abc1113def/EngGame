@@ -10,7 +10,7 @@
     "build:single": "vite build --mode single",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "selftest": "tsx scripts/selftest.ts && tsx scripts/arrtest.ts"
+    "selftest": "tsx scripts/selftest.ts && tsx scripts/arrtest.ts && tsx scripts/c172test.ts"
   },
   "dependencies": {
     "react": "18.3.1",

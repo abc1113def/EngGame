@@ -1,7 +1,7 @@
 import { setupArrival } from './arrival';
 import { c172Initial } from './c172/init';
 import { defaultSwitches } from './controls';
-import { GEO, GEO_LFCL, GEO_LFPO, SCN } from './scenario';
+import { SCN_C172, GEO, GEO_LFCL, GEO_LFPO, SCN } from './scenario';
 import type { AircraftType, EngineState, FailureLevel, Scenario, SimState } from './types';
 
 /** Простой детерминированный ГПСЧ (mulberry32) */
@@ -59,10 +59,13 @@ const FAILS_ARR_HARD = ['engFailApp', 'lgGravity'];
 
 export function pickC172Failures(level: FailureLevel, r: () => number): { id: string; at?: number }[] {
   if (level === 'off') return [];
-  const pool = level === 'light' ? ['c_water', 'c_lowOil', 'c_mag', 'c_lowBatt'] : ['c_water', 'c_lowOil', 'c_mag', 'c_alt', 'c_oilP', 'c_lowBatt'];
-  const n = level === 'light' ? 1 + Math.floor(r() * 2) : 2 + Math.floor(r() * 2);
+  // устранимые на земле: вода (слить отстой), масло (долить), слабый аккумулятор, генератор (сброс)
+  const pool = ['c_water', 'c_lowOil', 'c_lowBatt', 'c_alt'];
+  const n = level === 'light' ? 1 : 2;
   const out: { id: string }[] = [];
   while (out.length < n && pool.length) out.push({ id: pool.splice(Math.floor(r() * pool.length), 1)[0] });
+  // «не-лётные» неисправности — только в полном режиме и не всегда
+  if (level === 'full' && r() < 0.35) out.push({ id: r() < 0.5 ? 'c_mag' : 'c_oilP' });
   return out;
 }
 
@@ -370,5 +373,16 @@ export function createState(seed: number, failures: FailureLevel, fastAlign: boo
     st.flags.toEngFailEng = r() < 0.5 ? 1 : 2;
   }
   if (scn === 'arr') setupArrival(st, 'start');
+  if (type === 'c172') {
+    st.c.com = 122500;
+    st.c.comStby = SCN_C172.freqs.ATIS;
+    st.c.hdgBug = geo.rwyHdg;
+    st.gnd.headset = false;
+    st.gnd.chocks = false;
+    st.gnd.tow = false;
+    st.gnd.boarding = 1;
+    st.ac.gw = 1100;
+    st.fms.thrRed = geo.elev;
+  }
   return st;
 }

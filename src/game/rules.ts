@@ -10,7 +10,7 @@ import { checkStable } from './procedure_arr';
 export interface Rules {
   onEvent(g: Game, e: SimEvent): void;
   flags(g: Game, dt: number): void;
-  tick(g: Game, dt: number): { res: SimState['result']; reason: L } | null;
+  tick(g: Game, dt: number): { res: SimState['result']; reason: L; partial?: boolean } | null;
 }
 
 const r = (ru: string, en: string): L => ({ ru, en });

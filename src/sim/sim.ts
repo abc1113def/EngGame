@@ -4,7 +4,10 @@ import { pressClr, pressEmerCanc, pressMasterCaut, pressMasterWarn, pressPage, p
 import { updEngines, TLA } from './engines';
 import { updAfs, updControls, updFlight } from './flight';
 import { mcduKey, mcduLsk } from './fms';
-import { comms, updFailures, updGround } from './ground';
+import { comms, deliverPending, updFailures, updGround } from './ground';
+import { updC172Systems, av1, av2 } from './c172/systems';
+import { updC172Flight } from './c172/flight';
+import { c172Walk, type WalkId } from './c172/walk';
 import { createState } from './state';
 import { annPower, clamp, updAdirs, updApu, updBleed, updElec, updFuel, updHyd } from './systems';
 import type { AircraftType, FailureLevel, Scenario, SimState } from './types';
@@ -79,6 +82,13 @@ export class Sim {
     const s = this.s;
     const emit = this.emit;
     s.t += dt;
+    if (s.type === 'c172') {
+      updC172Systems(s, dt, emit);
+      updC172Flight(s, dt, emit);
+      deliverPending(s, emit);
+      for (const f of this.tickSubs) f(dt);
+      return;
+    }
     // синхронизация простых кнопок
     s.fcu.fd = s.sw.FD === 1;
     s.fcu.ls = s.sw.LS === 1;
@@ -137,6 +147,12 @@ export class Sim {
     v = clamp(Math.round(v), 0, max);
     const old = s.sw[id];
     if (old === v) return;
+    if (id === 'C_MAGS' && v === 4 && old !== 3 && old !== 4) return; // START только из BOTH
+    if (id === 'C_FLAPS' && s.c.busV < 18) {
+      this.ui('lever');
+      s.sw[id] = v; // рычаг двигается, закрылки — нет
+      return;
+    }
     if (id === 'EXT_PWR' && !s.gnd.gpu) {
       this.ui('pb');
       return;
@@ -309,6 +325,39 @@ export class Sim {
         }
         break;
       }
+      case 'C_COM_FLIP':
+        if (av1(s)) [s.c.com, s.c.comStby] = [s.c.comStby, s.c.com];
+        break;
+      case 'C_AP': {
+        const c = s.c;
+        if (c.ap) {
+          c.ap = false;
+          this.emit({ type: 'apDisc', reason: 'pb' });
+        } else if (av2(s) && !s.ac.onGround && s.t - ((s.flags.cApPwrT as number) ?? s.t) > 5) {
+          c.ap = true;
+          c.apHdg = false;
+          c.apAlt = false;
+          s.flags.cApVs = Math.round(s.ac.vs / 100) * 100;
+          this.emit({ type: 'apOn' });
+        } else this.emit({ type: 'hint', key: 'cApNo' });
+        break;
+      }
+      case 'C_AP_HDG':
+        if (s.c.ap) s.c.apHdg = !s.c.apHdg;
+        break;
+      case 'C_AP_ALT':
+        if (s.c.ap) {
+          s.c.apAlt = !s.c.apAlt;
+          s.c.apAltTgt = Math.round(s.ac.alt / 20) * 20;
+        }
+        break;
+      case 'C_ANN_TEST':
+        if (s.c.busV > 18) s.flags.cAnnTested = true;
+        break;
+      case 'C_LOCK':
+        s.c.pre.lock = !s.c.pre.lock;
+        this.emit({ type: 'walk', id: 'lock' });
+        break;
       case 'GRAVITY_CRANK':
         s.flags.gravityCrank = ((s.flags.gravityCrank as number) ?? 0) + 1;
         break;
@@ -384,6 +433,28 @@ export class Sim {
           return;
         }
         break;
+      case 'C_TRIM':
+        s.c.trim = clamp(Math.round((s.c.trim + delta * 0.04) * 100) / 100, -1, 1);
+        break;
+      case 'C_COM_KNOB': {
+        if (!av1(s)) return;
+        let v = s.c.comStby;
+        if (ring === 'outer') v += delta * 1000;
+        else v += delta * 25;
+        if (v < 118000) v = 136975;
+        if (v > 136975) v = 118000;
+        s.c.comStby = v;
+        break;
+      }
+      case 'C_HDG_BUG':
+        s.c.hdgBug = ((s.c.hdgBug + delta * (ring === 'inner' ? 1 : 5)) % 360 + 360) % 360;
+        break;
+      case 'C_DG':
+        s.c.hiErr -= delta * (ring === 'inner' ? 1 : 5);
+        break;
+      case 'C_BARO':
+        s.c.baro = clamp(Math.round((s.c.baro + delta * 0.01) * 100) / 100, 28.1, 31);
+        break;
       case 'RUD_TRIM':
         if (!dcPwr) return;
         s.flags.rudReset = false;
@@ -430,6 +501,14 @@ export class Sim {
     const old = cur;
     this.setThrust(v);
     if (DETENTS.includes(this.s.sw.TL1) && this.s.sw.TL1 !== old) this.ui('detent');
+  }
+
+  /** Осмотр Cessna снаружи */
+  walk(id: WalkId) {
+    const msg = c172Walk(this.s, id, this.emit);
+    this.ui('pb');
+    this.notify();
+    return msg;
   }
 
   mcduKey(k: string) {

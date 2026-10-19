@@ -40,6 +40,8 @@ export class Game {
   /** память правил на одну игру */
   mem: Record<string, unknown> = {};
   gates = new Set<string>();
+  /** проверки, условие которых выполнялось в своей фазе (для экзамена) */
+  checkOk = new Set<string>();
   private unsub: (() => void)[] = [];
   private listeners = new Set<(r: Report) => void>();
 
@@ -122,7 +124,7 @@ export class Game {
       if (st.kind !== 'check' || this.isDone(st.id) || this.once.has(`chk_${st.id}`)) continue;
       if (order.indexOf(st.phase) >= lim || st.phase === 'emer') continue;
       this.once.add(`chk_${st.id}`);
-      if (this.stepDone(st)) this.doneAt[st.id] = this.s.t;
+      if (this.stepDone(st) || this.checkOk.has(st.id)) this.doneAt[st.id] = this.s.t;
       else this.pen(`chkfail_${st.id}`, 15, { ru: `Проверка не выполнена: ${st.title.ru}`, en: `Check failed: ${st.title.en}` });
     }
   }
@@ -134,7 +136,7 @@ export class Game {
     this.sim.emit({ type: 'stepDone', id: st.id });
     if (st.kind !== 'check' && st.phase !== 'emer' && !st.optional) this.evalChecks(st.phase);
     if (this.mode === 'exam' && st.req) {
-      const miss = st.req.filter((x) => !this.isDone(x) && STEP_BY_ID[x] && this.steps.includes(STEP_BY_ID[x]) && stepVisible(this.s, STEP_BY_ID[x]));
+      const miss = st.req.filter((x) => !this.isDone(x) && !this.checkOk.has(x) && STEP_BY_ID[x] && this.steps.includes(STEP_BY_ID[x]) && stepVisible(this.s, STEP_BY_ID[x]) && !(STEP_BY_ID[x].kind === 'check' && this.stepDone(STEP_BY_ID[x])));
       if (miss.length)
         this.pen(`order_${st.id}`, 20, {
           ru: `Нарушен порядок: «${st.title.ru}» до «${STEP_BY_ID[miss[0]].title.ru}»`,
@@ -185,7 +187,7 @@ export class Game {
   private tick(dt: number) {
     const s = this.s;
     if (this.ended) return;
-    updProcFlags(s, dt);
+    if (s.type === 'a320') updProcFlags(s, dt);
     this.rules.flags(this, dt);
     for (const st of this.steps) {
       if (this.isDone(st.id)) continue;
@@ -194,30 +196,34 @@ export class Game {
         if (this.acked.has(st.id) && this.stepDone(st)) this.markDone(st);
         continue;
       }
-      if (st.kind === 'check') continue; // в экзамене засчитывается на «воротах»
+      if (st.kind === 'check') {
+        // в экзамене засчитывается на «воротах», если условие выполнялось
+        if (this.stepDone(st)) this.checkOk.add(st.id);
+        continue;
+      }
       if (this.stepDone(st)) this.markDone(st);
     }
     const end = this.rules.tick(this, dt);
     if (end) {
       s.result = end.res;
       s.resultReason = end.reason.en;
-      this.finish(end.res, end.reason);
+      this.finish(end.res, end.reason, end.partial);
     }
   }
 
-  finish(res: SimState['result'] = this.s.result, reason: L = r('Сессия завершена.', 'Session finished.')): Report {
+  finish(res: SimState['result'] = this.s.result, reason: L = r('Сессия завершена.', 'Session finished.'), partial = false): Report {
     if (this.report) return this.report;
     const s = this.s;
-    if (res === 'success' || res === 'secured') {
+    if ((res === 'success' || res === 'secured') && !partial) {
       this.evalChecks('c_shut');
       this.gate('end', PHASES.map((p) => p.id).filter((p) => p !== 'emer'));
     }
     if (res === 'fail') this.items.push({ t: s.t, pts: -400, text: r('Полёт не выполнен', 'Flight failed') });
     this.ended = true;
     const vis = this.visibleSteps().filter((x) => !(ARR_PHASES.includes(x.phase) && s.leg !== 'arr'));
-    const total = vis.filter((x) => !x.optional).length;
     const done = vis.filter((x) => !x.optional && this.isDone(x.id)).length;
-    const missed = vis.filter((x) => !x.optional && !this.isDone(x.id) && x.phase !== 'emer' && !(x.kind === 'check' && this.mode === 'tutorial' && x.done(s))).map((x) => x.id);
+    const total = partial ? done : vis.filter((x) => !x.optional).length;
+    const missed = partial ? [] : vis.filter((x) => !x.optional && !this.isDone(x.id) && x.phase !== 'emer' && !(x.kind === 'check' && this.mode === 'tutorial' && x.done(s))).map((x) => x.id);
     const score = this.score;
     const grade = res === 'fail' ? r('2 — неудовлетворительно', 'F — fail') : score >= 950 ? r('5 — отлично', 'A — excellent') : score >= 850 ? r('4 — хорошо', 'B — good') : score >= 700 ? r('3 — удовлетворительно', 'C — satisfactory') : r('2 — неудовлетворительно', 'F — fail');
     this.report = { result: res, reason, score, max: 1000, grade, items: this.items, time: s.t, done, total, missed };

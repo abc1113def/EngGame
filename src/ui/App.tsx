@@ -210,9 +210,11 @@ export function App() {
           uiStore.toast({ ru: 'Уход на второй круг выполнен. Диспетчер выводит вас на повторный заход ILS 06.', en: 'Go-around flown. ATC vectors you for another ILS 06 approach.' }, 'info', 8000);
           raDone.current.clear();
           break;
-        case 'landing':
-          if (e.td) uiStore.log(s.t, 'info', { ru: `Касание: ${Math.round(e.td.vs)} фт/мин, ${Math.round(e.td.along)} м от торца`, en: `Touchdown: ${Math.round(e.td.vs)} fpm, ${Math.round(e.td.along)} m past threshold` });
+        case 'landing': {
+          const td = e.td ?? e;
+          if (td && td.vs !== undefined) uiStore.log(s.t, 'info', { ru: `Касание: ${Math.round(td.vs)} фт/мин, ${Math.round(td.along)} м от торца`, en: `Touchdown: ${Math.round(td.vs)} fpm, ${Math.round(td.along)} m past threshold` });
           break;
+        }
         case 'crossHold':
           if (!s.atc.lineupClear) uiStore.toast({ ru: 'Вы пересекли линию предварительного старта без разрешения!', en: 'You crossed the holding point without clearance!' }, 'pen', 6000);
           break;

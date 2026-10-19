@@ -1,9 +1,10 @@
 import { ilsDev } from './flight';
+import { c172Comms } from './c172/comms';
 import { SCN, SCN_ARR, SCN_C172 } from './scenario';
 import type { Emit } from './systems';
 import type { L, SimState } from './types';
 
-export type Unit = 'ATIS' | 'DEL' | 'GND' | 'TWR' | 'APP' | 'CREW' | 'CAB' | 'PA' | 'SYS';
+export type Unit = 'ATIS' | 'DEL' | 'GND' | 'TWR' | 'APP' | 'CREW' | 'CAB' | 'PA' | 'PAX' | 'SYS';
 
 const fq = (f: number) => (f / 1000).toFixed(3);
 export const freqStr = fq;
@@ -24,7 +25,7 @@ export function radioUnit(s: SimState): Unit | '' {
   return '';
 }
 
-function say(s: SimState, emit: Emit, unit: Unit, msg: L, delay = 0, apply?: string) {
+export function say(s: SimState, emit: Emit, unit: Unit, msg: L, delay = 0, apply?: string) {
   if (delay > 0) s.atc.pending.push({ at: s.t + delay, unit, msg, apply });
   else {
     emit({ type: 'radio', unit, msg });
@@ -32,7 +33,7 @@ function say(s: SimState, emit: Emit, unit: Unit, msg: L, delay = 0, apply?: str
   }
 }
 
-function me(s: SimState, emit: Emit, unit: Unit, msg: L) {
+export function me(s: SimState, emit: Emit, unit: Unit, msg: L) {
   emit({ type: 'radio', unit, msg, me: true });
 }
 
@@ -53,6 +54,10 @@ function applyCode(s: SimState, code: string, emit: Emit) {
       a.lineupClear = true;
       break;
     case 'takeoff':
+      a.toClear = true;
+      break;
+    case 'cleared':
+      a.lineupClear = true;
       a.toClear = true;
       break;
     case 'gpuOn':
@@ -104,6 +109,7 @@ const C = (s: SimState) => SCN.callsign;
 
 /** Все действия связи. Возвращает false, если действие невозможно. */
 export function comms(s: SimState, id: string, emit: Emit): boolean {
+  if (s.type === 'c172') return c172Comms(s, id, emit);
   const a = s.atc;
   const g = s.gnd;
   const unit = radioUnit(s);
@@ -431,7 +437,12 @@ export function updGround(s: SimState, dt: number, emit: Emit) {
       say(s, emit, 'CREW', { en: 'Cockpit, ground: chocks in place, ground power is available if you need it.', ru: 'Кабина, земля: колодки установлены, наземное питание есть по запросу.' }, 6, 'chocks');
     }
   }
-  // отложенные сообщения
+  deliverPending(s, emit);
+}
+
+/** Отложенные сообщения */
+export function deliverPending(s: SimState, emit: Emit) {
+  const a = s.atc;
   if (a.pending.length) {
     const due = a.pending.filter((p) => p.at <= s.t);
     if (due.length) {
