@@ -180,7 +180,7 @@ export function updC172Systems(s: SimState, dt: number, emit: Emit) {
   if (c.oilP > 10) c.hobbs += dt / 3600;
 
   // ---------------- вакуум и гироскопы ----------------
-  c.vac = lag(c.vac, c.rpm > 400 ? clamp(c.rpm / 1050 * 4.6, 0, 5.3) : 0, 1, dt);
+  c.vac = lag(c.vac, c.rpm > 400 ? clamp((c.rpm / 900) * 4.6, 0, 5.3) : 0, 1, dt);
   const spinT = c.vac > 3.8 ? 1 : c.vac / 3.8;
   c.aiSpin = lag(c.aiSpin, spinT, spinT > c.aiSpin ? 35 : 120, dt);
   c.hiSpin = lag(c.hiSpin, spinT, spinT > c.hiSpin ? 35 : 120, dt);

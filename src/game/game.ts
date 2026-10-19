@@ -97,7 +97,8 @@ export class Game {
     return this.steps.filter((st) => stepVisible(this.s, st) || this.isDone(st.id));
   }
   currentStep(): Step | null {
-    const vis = this.visibleSteps();
+    const arr = this.s.leg === 'arr';
+    const vis = this.visibleSteps().filter((st) => !arr || st.phase === 'emer' || ARR_PHASES.includes(st.phase));
     const emer = vis.find((st) => st.phase === 'emer' && !this.isDone(st.id));
     if (emer) return emer;
     return vis.find((st) => st.phase !== 'emer' && !this.isDone(st.id) && !st.optional) ?? null;
@@ -129,12 +130,28 @@ export class Game {
     }
   }
 
+  /** Обучение: проверки прошлых фаз, которые игрок «проскочил», не блокируют подсказки */
+  private skipOldChecks(upTo: PhaseId) {
+    const order = PHASES.map((p) => p.id);
+    const lim = order.indexOf(upTo);
+    for (const st of this.steps) {
+      if (st.kind !== 'check' || this.isDone(st.id) || st.phase === 'emer') continue;
+      if (order.indexOf(st.phase) < lim) {
+        this.doneAt[st.id] = this.s.t;
+        this.version++;
+      }
+    }
+  }
+
   private markDone(st: Step) {
     if (this.isDone(st.id)) return;
     this.doneAt[st.id] = this.s.t;
     this.version++;
     this.sim.emit({ type: 'stepDone', id: st.id });
-    if (st.kind !== 'check' && st.phase !== 'emer' && !st.optional) this.evalChecks(st.phase);
+    if (st.kind !== 'check' && st.phase !== 'emer' && !st.optional) {
+      this.evalChecks(st.phase);
+      if (this.mode === 'tutorial') this.skipOldChecks(st.phase);
+    }
     if (this.mode === 'exam' && st.req) {
       const miss = st.req.filter((x) => !this.isDone(x) && !this.checkOk.has(x) && STEP_BY_ID[x] && this.steps.includes(STEP_BY_ID[x]) && stepVisible(this.s, STEP_BY_ID[x]) && !(STEP_BY_ID[x].kind === 'check' && this.stepDone(STEP_BY_ID[x])));
       if (miss.length)
