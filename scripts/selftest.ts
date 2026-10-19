@@ -6,6 +6,7 @@ import { SCN } from '../src/sim/scenario';
 import { sim, type SimEvent } from '../src/sim/sim';
 import { Game } from '../src/game/game';
 import { CHECKLISTS } from '../src/game/checklists';
+void CHECKLISTS;
 
 declare const process: { argv: string[]; exitCode?: number; exit(c: number): never };
 

@@ -1,6 +1,5 @@
-import { KT, headwind } from '../sim/flight';
+import { KT, headwind, ilsDev } from '../sim/flight';
 import { fplnLegs } from '../sim/fms';
-import { GEO, SCN, WPTS } from '../sim/scenario';
 import { dispPower, irOk } from '../sim/systems';
 import { useSimFrame } from '../ui/hooks';
 import { C, Screen, T, duMode, polar } from './common';
@@ -30,14 +29,20 @@ export function ND() {
     return [cx + rx * nmPx, cy - ry * nmPx] as const;
   };
 
+  const G = s.geo;
   const legs = fplnLegs(s);
   const pts: { id: string; x: number; y: number }[] = [];
   for (const L of legs) {
-    if (L.kind === 'dep') pts.push({ id: L.id, x: GEO.thr.x, y: GEO.thr.y });
-    else if (WPTS[L.id]) pts.push({ id: L.id, ...WPTS[L.id] });
+    if (L.kind === 'dep') pts.push({ id: L.id, x: G.thr.x, y: G.thr.y });
+    else if (G.wpts[L.id]) pts.push({ id: L.id, ...G.wpts[L.id] });
   }
   const route = pts.map((p) => toScr(p.x, p.y));
-  const toWpt = pts.find((p, i) => i > 0 && Math.hypot(p.x - s.ac.x, p.y - s.ac.y) > 1000 && (s.ac.onGround ? true : true));
+  const alongOf = (x: number, y: number) => (x - G.thr.x) * G.rwyDir.x + (y - G.thr.y) * G.rwyDir.y;
+  const acAlong = alongOf(s.ac.x, s.ac.y);
+  const toWpt =
+    s.leg === 'arr'
+      ? pts.find((p) => alongOf(p.x, p.y) > acAlong + 300)
+      : pts.find((p, i) => i > 0 && Math.hypot(p.x - s.ac.x, p.y - s.ac.y) > 1000);
   const brg = toWpt ? (((Math.atan2(toWpt.x - s.ac.x, toWpt.y - s.ac.y) * 180) / Math.PI + 360) % 360) : 0;
   const dist = toWpt ? Math.hypot(toWpt.x - s.ac.x, toWpt.y - s.ac.y) / 1852 : 0;
   const gs = Math.max(0, s.ac.gs * KT);
@@ -61,8 +66,8 @@ export function ND() {
     }
   }
 
-  const thr = toScr(GEO.thr.x, GEO.thr.y);
-  const rend = toScr(GEO.thr.x + GEO.rwyDir.x * SCN.rwyLen, GEO.thr.y + GEO.rwyDir.y * SCN.rwyLen);
+  const thr = toScr(G.thr.x, G.thr.y);
+  const rend = toScr(G.thr.x + G.rwyDir.x * G.rwyLen, G.thr.y + G.rwyDir.y * G.rwyLen);
   const wind = !s.ac.onGround && tas > 100;
   const hw = headwind(s);
   void hw;
@@ -83,7 +88,7 @@ export function ND() {
       </T>
       {wind && (
         <T x={10} y={46} c={C.g} s={16}>
-          {s.atc.windDir}/{s.atc.windSpd}
+          {s.leg === 'arr' ? `${s.atc.arrWindDir}/${s.atc.arrWindSpd}` : `${s.atc.windDir}/${s.atc.windSpd}`}
         </T>
       )}
       {ok && toWpt && (
@@ -137,8 +142,9 @@ export function ND() {
               <polyline points={route.map((p) => p.join(',')).join(' ')} fill="none" stroke={C.g} strokeWidth={2.5} />
             )}
             {(ndMode === 2 || ndMode === 3 || ndMode === 4) &&
-              pts.slice(1).map((p, i) => {
-                const [x, y] = route[i + 1];
+              pts.map((p, i) => {
+                if (i === 0 && s.leg === 'dep') return null;
+                const [x, y] = route[i];
                 return (
                   <g key={p.id}>
                     <path d={`M ${x} ${y - 7} L ${x + 7} ${y} L ${x} ${y + 7} L ${x - 7} ${y} Z`} fill="none" stroke={p === toWpt ? C.w : C.g} strokeWidth={2} />
@@ -156,13 +162,32 @@ export function ND() {
             <line x1={cx - 24} y1={cy} x2={cx + 24} y2={cy} />
             <line x1={cx - 9} y1={cy + 20} x2={cx + 9} y2={cy + 20} />
           </g>
+          {ndMode === 0 && G.ils && s.fms.appr && <LsRose cx={cx} cy={cy} R={R} />}
           {ndMode <= 1 && (
-            <T x={10} y={480} s={15} c={C.w}>
-              {ndMode === 0 ? 'ILS1 ---' : 'VOR1 TOU'}
+            <T x={10} y={480} s={15} c={ndMode === 0 && G.ils && s.fms.appr ? C.m : C.w}>
+              {ndMode === 0 ? (G.ils && s.fms.appr ? `ILS1 ${G.ils.ident} ${G.ils.freq}  CRS ${String(G.rwyHdg).padStart(3, '0')}°` : 'ILS1 ---') : 'VOR1 TOU'}
             </T>
           )}
         </>
       )}
     </Screen>
+  );
+}
+
+function LsRose({ cx, cy, R }: { cx: number; cy: number; R: number }) {
+  const s = useSimFrame(15);
+  const dev = ilsDev(s);
+  const rel = s.geo.rwyHdg - s.ac.hdg;
+  const off = dev && dev.locValid ? -dev.locDots * R * 0.16 : 0;
+  return (
+    <g transform={`rotate(${rel} ${cx} ${cy})`}>
+      {[-2, -1, 1, 2].map((d) => (
+        <circle key={d} cx={cx + d * R * 0.16} cy={cy} r={4} fill="none" stroke={C.w} strokeWidth={1.5} />
+      ))}
+      <line x1={cx} y1={cy - R * 0.85} x2={cx} y2={cy - R * 0.45} stroke={C.m} strokeWidth={4} />
+      <path d={`M ${cx - 10} ${cy - R * 0.72} L ${cx} ${cy - R * 0.85} L ${cx + 10} ${cy - R * 0.72}`} stroke={C.m} strokeWidth={4} fill="none" />
+      <line x1={cx} y1={cy + R * 0.45} x2={cx} y2={cy + R * 0.85} stroke={C.m} strokeWidth={4} />
+      {dev && dev.locValid && <line x1={cx + off} y1={cy - R * 0.4} x2={cx + off} y2={cy + R * 0.4} stroke={C.m} strokeWidth={4} />}
+    </g>
   );
 }

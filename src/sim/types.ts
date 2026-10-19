@@ -5,7 +5,9 @@ export interface L {
   en: string;
 }
 
-export type ViewId = 'ovhd' | 'front' | 'ped';
+export type ViewId = 'ovhd' | 'front' | 'ped' | 'out' | 'c172' | 'walk';
+export type AircraftType = 'a320' | 'c172';
+export type Scenario = 'dep' | 'arr' | 'full' | 'pattern';
 
 export type FailureLevel = 'off' | 'light' | 'full';
 
@@ -166,7 +168,9 @@ export type GroundPhase =
   | 'holding'
   | 'lineup'
   | 'runway'
-  | 'airborne';
+  | 'airborne'
+  | 'taxiin'
+  | 'parked';
 
 export interface AircraftState {
   onGround: boolean;
@@ -205,6 +209,9 @@ export interface AircraftState {
   maxGs: number;
   overrun: boolean;
   stopped: boolean;
+  landed: boolean;
+  td: { vs: number; along: number; side: number; pitch: number; ias: number } | null;
+  exit: number; // индекс схода с ВПП
 }
 
 export interface FmsState {
@@ -237,6 +244,14 @@ export interface FmsState {
   accAlt: number;
   depScroll: number;
   route: string[];
+  arr: boolean; // активен заход на посадку
+  appr: string;
+  qnhAppr: number | null;
+  tempAppr: number | null;
+  windAppr: string;
+  mda: number | null;
+  dh: number | null;
+  ldgConf: 3 | 4;
 }
 
 export interface FcuState {
@@ -309,6 +324,15 @@ export interface AtcState {
   toClear: boolean;
   contactTower: boolean;
   pending: { at: number; unit: string; msg: L; apply?: string }[];
+  // прилёт
+  appClear: boolean;
+  ldgClear: boolean;
+  taxiInClear: boolean;
+  arrAtis: boolean;
+  arrQnh: number;
+  arrLetter: string;
+  arrWindDir: number;
+  arrWindSpd: number;
 }
 
 export type EcamLevel = 'warn' | 'caut';
@@ -343,6 +367,11 @@ export interface Flags {
 }
 
 export interface SimState {
+  type: AircraftType;
+  scn: Scenario;
+  leg: 'dep' | 'arr';
+  geo: import('./scenario').AirportGeo;
+  c: import('./c172/types').C172State;
   t: number;
   sw: Record<string, number>;
   eng: [EngineState, EngineState];
@@ -365,12 +394,12 @@ export interface SimState {
   elev: number;
   rwyLen: number;
   rwyHdg: number;
-  result: '' | 'success' | 'rto' | 'fail' | 'fire';
+  result: '' | 'success' | 'rto' | 'fail' | 'fire' | 'secured';
   resultReason: string;
   momentary: Record<string, boolean>; // удерживаемые кнопки
   keys: Record<string, boolean>;
   seed: number;
   failures: { id: string; at?: number; done?: boolean }[];
-  fma: { thr: string; vert: string; lat: string; col5: string; lvrClb: boolean };
+  fma: { thr: string; vert: string; lat: string; col5: string; lvrClb: boolean; vArm: string; lArm: string; cat: string };
   fdPitch: number | null;
 }

@@ -1,6 +1,8 @@
+import { setupArrival } from './arrival';
+import { c172Initial } from './c172/init';
 import { defaultSwitches } from './controls';
-import { GEO, SCN } from './scenario';
-import type { EngineState, FailureLevel, SimState } from './types';
+import { GEO, GEO_LFCL, GEO_LFPO, SCN } from './scenario';
+import type { AircraftType, EngineState, FailureLevel, Scenario, SimState } from './types';
 
 /** Простой детерминированный ГПСЧ (mulberry32) */
 export function rng(seed: number) {
@@ -52,8 +54,30 @@ function engine(oat: number): EngineState {
 const FAILS_LIGHT = ['lowBat', 'apuStart', 'lowAccu', 'elacFault', 'pack1'];
 const FAILS_HARD = ['hotStart', 'noLight', 'engFire', 'toEngFail'];
 
-export function pickFailures(level: FailureLevel, r: () => number): { id: string; at?: number }[] {
+const FAILS_ARR_LIGHT = ['pack1', 'lgGravity'];
+const FAILS_ARR_HARD = ['engFailApp', 'lgGravity'];
+
+export function pickC172Failures(level: FailureLevel, r: () => number): { id: string; at?: number }[] {
   if (level === 'off') return [];
+  const pool = level === 'light' ? ['c_water', 'c_lowOil', 'c_mag', 'c_lowBatt'] : ['c_water', 'c_lowOil', 'c_mag', 'c_alt', 'c_oilP', 'c_lowBatt'];
+  const n = level === 'light' ? 1 + Math.floor(r() * 2) : 2 + Math.floor(r() * 2);
+  const out: { id: string }[] = [];
+  while (out.length < n && pool.length) out.push({ id: pool.splice(Math.floor(r() * pool.length), 1)[0] });
+  return out;
+}
+
+export function pickFailures(level: FailureLevel, r: () => number, scn: Scenario = 'dep'): { id: string; at?: number }[] {
+  if (level === 'off') return [];
+  if (scn === 'arr') {
+    const pool = level === 'light' ? [...FAILS_ARR_LIGHT] : [...FAILS_ARR_LIGHT, ...FAILS_ARR_HARD];
+    const id = pool[Math.floor(r() * pool.length)];
+    return [{ id }];
+  }
+  if (scn === 'full') {
+    const dep = pickFailures(level, r, 'dep').filter((f) => f.id !== 'pack1');
+    if (level === 'full') dep.push({ id: FAILS_ARR_HARD[Math.floor(r() * FAILS_ARR_HARD.length)] });
+    return dep;
+  }
   const pool = level === 'light' ? [...FAILS_LIGHT] : [...FAILS_LIGHT, ...FAILS_HARD, ...FAILS_HARD];
   const n = level === 'light' ? 1 + Math.floor(r() * 2) : 2 + Math.floor(r() * 2);
   const out: { id: string; at?: number }[] = [];
@@ -70,7 +94,7 @@ export function pickFailures(level: FailureLevel, r: () => number): { id: string
   return out;
 }
 
-export function createState(seed: number, failures: FailureLevel, fastAlign: boolean): SimState {
+export function createState(seed: number, failures: FailureLevel, fastAlign: boolean, type: AircraftType = 'a320', scn: Scenario = 'dep'): SimState {
   const r = rng(seed);
   const oat = 8 + Math.round(r() * 14);
   const qnh = 1004 + Math.round(r() * 22);
@@ -80,13 +104,19 @@ export function createState(seed: number, failures: FailureLevel, fastAlign: boo
   const windDir = 300 + Math.round(r() * 4) * 10;
   const windSpd = 4 + Math.round(r() * 8);
   const letters = 'ABCDEFGHJKLMNOPQRSTUVWXYZ';
-  const fails = pickFailures(failures, r);
+  const fails = type === 'c172' ? pickC172Failures(failures, r) : pickFailures(failures, r, scn);
   const has = (id: string) => fails.some((f) => f.id === id);
 
   const sw = defaultSwitches();
   const batCharge = has('lowBat') ? 0.18 : 0.62 + r() * 0.25;
 
+  const geo = type === 'c172' ? GEO_LFCL : scn === 'arr' ? GEO_LFPO : GEO;
   const st: SimState = {
+    type,
+    scn,
+    leg: scn === 'arr' ? 'arr' : 'dep',
+    geo,
+    c: c172Initial(r, fails.map((f) => f.id)),
     t: 0,
     sw,
     eng: [engine(oat), engine(oat)],
@@ -162,15 +192,15 @@ export function createState(seed: number, failures: FailureLevel, fastAlign: boo
       onGround: true,
       gs: 0,
       ias: 0,
-      alt: SCN.elev,
+      alt: geo.elev,
       vs: 0,
       pitch: 0,
       roll: 0,
       gamma: 0,
-      hdg: GEO.standHdg,
+      hdg: geo.standHdg,
       dist: 0,
-      x: GEO.stand.x,
-      y: GEO.stand.y,
+      x: geo.stand.x,
+      y: geo.stand.y,
       gw: (SCN.zfw + SCN.block) * 1000,
       gear: 1,
       flaps: 0,
@@ -195,6 +225,9 @@ export function createState(seed: number, failures: FailureLevel, fastAlign: boo
       maxGs: 0,
       overrun: false,
       stopped: true,
+      landed: false,
+      td: null,
+      exit: -1,
     },
     fms: {
       page: 'STATUS',
@@ -226,6 +259,14 @@ export function createState(seed: number, failures: FailureLevel, fastAlign: boo
       accAlt: Math.round((SCN.elev + 1500) / 10) * 10,
       depScroll: 0,
       route: [],
+      arr: false,
+      appr: '',
+      qnhAppr: null,
+      tempAppr: null,
+      windAppr: '',
+      mda: null,
+      dh: null,
+      ldgConf: 4,
     },
     fcu: {
       spd: 100,
@@ -278,6 +319,14 @@ export function createState(seed: number, failures: FailureLevel, fastAlign: boo
       toClear: false,
       contactTower: false,
       pending: [],
+      appClear: false,
+      ldgClear: false,
+      taxiInClear: false,
+      arrAtis: false,
+      arrQnh: 1002 + Math.round(r() * 24),
+      arrLetter: letters[Math.floor(r() * letters.length)],
+      arrWindDir: 40 + Math.round(r() * 5) * 10,
+      arrWindSpd: 3 + Math.round(r() * 9),
     },
     ecam: {
       active: [],
@@ -298,16 +347,16 @@ export function createState(seed: number, failures: FailureLevel, fastAlign: boo
     ann: {},
     flags: {},
     oat,
-    elev: SCN.elev,
-    rwyLen: SCN.rwyLen,
-    rwyHdg: SCN.rwyHdg,
+    elev: geo.elev,
+    rwyLen: geo.rwyLen,
+    rwyHdg: geo.rwyHdg,
     result: '',
     resultReason: '',
     momentary: {},
     keys: {},
     seed,
     failures: fails,
-    fma: { thr: '', vert: '', lat: '', col5: '', lvrClb: false },
+    fma: { thr: '', vert: '', lat: '', col5: '', lvrClb: false, vArm: '', lArm: '', cat: '' },
     fdPitch: null,
   };
   if (has('hotStart')) st.eng[r() < 0.5 ? 0 : 1].failPending = 'HOT';
@@ -320,5 +369,6 @@ export function createState(seed: number, failures: FailureLevel, fastAlign: boo
     st.flags.toEngFailSpd = ef.at;
     st.flags.toEngFailEng = r() < 0.5 ? 1 : 2;
   }
+  if (scn === 'arr') setupArrival(st, 'start');
   return st;
 }

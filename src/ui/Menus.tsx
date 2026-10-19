@@ -1,17 +1,64 @@
 import { useEffect, useState } from 'react';
 import type { Mode, Report } from '../game/game';
-import { STEP_BY_ID } from '../game/procedure';
-import { KEYS_HELP, UI } from '../i18n/ui';
+import { STEP_BY_ID } from '../game/steps';
+import { keysHelp, UI } from '../i18n/ui';
 import { CONTROLS } from '../sim/controls';
-import type { FailureLevel } from '../sim/types';
+import type { AircraftType, FailureLevel, L, Scenario } from '../sim/types';
 import { setSettings, useSettings, useT, useLang } from './hooks';
 import { sim } from '../sim/sim';
 
-export function StartMenu({ onStart }: { onStart: (mode: Mode) => void }) {
+const MISSIONS: { ac: AircraftType; scn: Scenario; name: L; desc: L; time: string }[] = [
+  {
+    ac: 'a320',
+    scn: 'dep',
+    name: { ru: 'A320 · Вылет', en: 'A320 · Departure' },
+    desc: { ru: 'Тулуза: от полностью обесточенного самолёта до взлёта и набора 3000 фт.', en: 'Toulouse: from a completely dark aircraft to take-off and climb to 3000 ft.' },
+    time: '35–50 min',
+  },
+  {
+    ac: 'a320',
+    scn: 'arr',
+    name: { ru: 'A320 · Прилёт', en: 'A320 · Arrival' },
+    desc: { ru: 'Париж-Орли: заход ILS 06, посадка, заруливание и обесточивание до Cold & Dark.', en: 'Paris Orly: ILS 06 approach, landing, taxi-in and shutdown to cold & dark.' },
+    time: '20–30 min',
+  },
+  {
+    ac: 'a320',
+    scn: 'full',
+    name: { ru: 'A320 · Полный рейс', en: 'A320 · Full flight' },
+    desc: { ru: 'Cold & Dark → вылет → (крейсер пропускается) → заход и посадка → Cold & Dark.', en: 'Cold & dark → departure → (cruise skipped) → approach and landing → cold & dark.' },
+    time: '60–80 min',
+  },
+  {
+    ac: 'c172',
+    scn: 'pattern',
+    name: { ru: 'Cessna 172 · Полёт по кругу', en: 'Cessna 172 · Traffic pattern' },
+    desc: { ru: 'Ласборд: осмотр, запуск, опробование, взлёт, круг, посадка и стоянка.', en: 'Lasbordes: walk-around, start, run-up, take-off, circuit, landing and shutdown.' },
+    time: '25–35 min',
+  },
+];
+
+export function StartMenu({ onStart }: { onStart: (mode: Mode, ac: AircraftType, scn: Scenario) => void }) {
   const st = useSettings();
   const t = useT();
   const [mode, setMode] = useState<Mode>('tutorial');
+  const [mi, setMi] = useState(() => {
+    try {
+      return Math.min(MISSIONS.length - 1, Math.max(0, Number(localStorage.getItem('engame.mission') ?? 0) || 0));
+    } catch {
+      return 0;
+    }
+  });
   const [help, setHelp] = useState(false);
+  const m = MISSIONS[mi];
+  const pick = (i: number) => {
+    setMi(i);
+    try {
+      localStorage.setItem('engame.mission', String(i));
+    } catch {
+      /* ignore */
+    }
+  };
   return (
     <div className="overlay">
       <div className="menu">
@@ -20,8 +67,20 @@ export function StartMenu({ onStart }: { onStart: (mode: Mode) => void }) {
             <path d="M5 22 L60 18 L100 8 L108 10 L80 22 L112 24 L114 28 L80 28 L100 36 L94 37 L60 30 L5 26 Z" fill="#36e3ff" />
           </svg>
           <div>
-            <h1>A320 · COLD &amp; DARK</h1>
-            <div className="dim">{t({ ru: 'Запуск самолёта от полностью обесточенного состояния до взлёта', en: 'From a completely dark aircraft to take-off' })}</div>
+            <h1>COLD &amp; DARK</h1>
+            <div className="dim">{t({ ru: 'Airbus A320 и Cessna 172: от обесточенного самолёта до полёта и обратно', en: 'Airbus A320 and Cessna 172: from a dark aircraft to flight and back' })}</div>
+          </div>
+        </div>
+        <div className="menu-sec">
+          <div className="menu-h">{t({ ru: 'Сценарий', en: 'Scenario' })}</div>
+          <div className="mission-cards">
+            {MISSIONS.map((x, i) => (
+              <div key={i} className={`mode-card mission ${mi === i ? 'sel' : ''}`} onClick={() => pick(i)}>
+                <b>{t(x.name)}</b>
+                <div>{t(x.desc)}</div>
+                <div className="dim small">⏱ {x.time}</div>
+              </div>
+            ))}
           </div>
         </div>
         <div className="menu-sec">
@@ -46,7 +105,7 @@ export function StartMenu({ onStart }: { onStart: (mode: Mode) => void }) {
             ))}
           </div>
           <div className="menu-sec">
-            <div className="menu-h">{t(UI.align)}</div>
+            <div className="menu-h">{t(UI.align)}{m.ac === 'c172' ? ' (A320)' : ''}</div>
             <label className="radio">
               <input type="radio" checked={st.fastAlign} onChange={() => setSettings({ fastAlign: true })} />
               {t(UI.alignFast)}
@@ -72,7 +131,7 @@ export function StartMenu({ onStart }: { onStart: (mode: Mode) => void }) {
             </label>
           </div>
         </div>
-        <button className="big primary" onClick={() => onStart(mode)}>
+        <button className="big primary" onClick={() => onStart(mode, m.ac, m.scn)}>
           {t(UI.start)} ▶
         </button>
         <button className="link" onClick={() => setHelp(!help)}>
@@ -81,7 +140,7 @@ export function StartMenu({ onStart }: { onStart: (mode: Mode) => void }) {
         {help && (
           <table className="keys">
             <tbody>
-              {KEYS_HELP.map((k) => (
+              {keysHelp(m.ac).map((k) => (
                 <tr key={k.k}>
                   <td>
                     <kbd>{k.k}</kbd>
@@ -102,7 +161,8 @@ export function StartMenu({ onStart }: { onStart: (mode: Mode) => void }) {
 export function Debrief({ rep, mode, onAgain, onClose }: { rep: Report; mode: Mode; onAgain: () => void; onClose: () => void }) {
   const t = useT();
   const title = {
-    success: { ru: '✈ Взлёт выполнен', en: '✈ Take-off complete' },
+    success: { ru: '✈ Сценарий выполнен', en: '✈ Scenario complete' },
+    secured: { ru: '✓ Рейс завершён — самолёт обесточен', en: '✓ Flight complete — aircraft secured' },
     rto: { ru: '■ Взлёт прерван', en: '■ Rejected take-off' },
     fire: { ru: '🔥 Пожар ликвидирован', en: '🔥 Fire handled' },
     fail: { ru: '✗ Полёт не выполнен', en: '✗ Flight failed' },

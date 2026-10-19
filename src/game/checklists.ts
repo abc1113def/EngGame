@@ -1,7 +1,8 @@
 import { fob, irOk } from '../sim/systems';
-import { leftMemo } from '../sim/ecam';
+import { leftMemo, ldgMemoVisible } from '../sim/ecam';
 import { SCN } from '../sim/scenario';
 import type { L, SimState } from '../sim/types';
+import { C172_CHECKLISTS } from '../sim/c172/checklists';
 
 export interface ClItem {
   ch: string; // вызов
@@ -15,6 +16,8 @@ export interface Checklist {
   name: string;
   flag: string;
   items: ClItem[];
+  leg?: 'dep' | 'arr';
+  optional?: boolean;
 }
 
 const T = () => true;
@@ -75,4 +78,94 @@ export const CHECKLISTS: Checklist[] = [
       { ch: 'PACKS', resp: () => 'AS RQRD', ok: T, why: { ru: '', en: '' } },
     ],
   },
+  {
+    id: 'AFTER_TAKEOFF',
+    name: 'AFTER TAKEOFF / CLIMB',
+    flag: 'cl_AFTER_TAKEOFF',
+    optional: true,
+    items: [
+      { ch: 'LDG GEAR', resp: () => 'UP', ok: (s) => s.sw.GEAR === 0 && s.ac.gear < 0.01, why: { ru: 'Шасси не убрано.', en: 'Gear not up.' } },
+      { ch: 'FLAPS', resp: () => 'RETRACTED', ok: (s) => s.sw.FLAPS === 0 && s.ac.slats < 0.5, why: { ru: 'Механизация не убрана (убирать на скоростях F и S).', en: 'Flaps not retracted (retract at F and S speeds).' } },
+      { ch: 'PACKS', resp: () => 'ON', ok: (s) => s.sw.PACK1 === 1 && s.sw.PACK2 === 1, why: { ru: 'Кондиционеры выключены.', en: 'Packs off.' } },
+      { ch: 'BARO REF', resp: () => 'STD SET', line: true, ok: (s) => s.fcu.baroStd || s.ac.alt < 5000, why: { ru: 'Выше высоты перехода — STD.', en: 'Above transition altitude set STD.' } },
+    ],
+  },
+  // ============================ прилёт ============================
+  {
+    id: 'APPROACH',
+    name: 'APPROACH',
+    flag: 'cl_APPROACH',
+    leg: 'arr',
+    items: [
+      { ch: 'BRIEFING', resp: () => 'CONFIRMED', ok: T, why: { ru: '', en: '' } },
+      { ch: 'ECAM STATUS', resp: () => 'CHECKED', ok: (s) => !!s.flags.stsArr, why: { ru: 'Страница STATUS не просмотрена на прилёте.', en: 'STATUS page not reviewed.' } },
+      { ch: 'SEAT BELTS', resp: () => 'ON', ok: (s) => s.sw.SEAT_BELTS === 1, why: { ru: 'Табло ремней выключено.', en: 'Seat belts sign off.' } },
+      { ch: 'BARO REF', resp: (s) => `${s.fcu.baroStd ? 'STD' : s.fcu.baro} SET`, ok: (s) => s.atc.arrAtis && !s.fcu.baroStd && s.fcu.baro === s.atc.arrQnh, why: { ru: 'Давление не равно QNH Орли.', en: 'Baro is not the Orly QNH.' } },
+      { ch: 'MINIMUM', resp: (s) => `${s.fms.mda ?? '---'} SET`, ok: (s) => s.fms.mda === 491, why: { ru: 'Минимум BARO 491 не введён в PERF APPR.', en: 'BARO 491 minimum not set in PERF APPR.' } },
+      { ch: 'AUTO BRAKE', resp: (s) => ['OFF', 'LO', 'MED', 'MAX'][s.ac.autobrk], ok: (s) => s.ac.autobrk === 1 || s.ac.autobrk === 2, why: { ru: 'Автотормоз LO или MED.', en: 'Autobrake LO or MED.' } },
+      { ch: 'ENG MODE SEL', resp: () => 'AS RQRD', ok: (s) => s.sw.ENG_MODE !== 0, why: { ru: '', en: '' } },
+    ],
+  },
+  {
+    id: 'LANDING',
+    name: 'LANDING',
+    flag: 'cl_LANDING',
+    leg: 'arr',
+    items: [
+      { ch: 'CABIN CREW', resp: () => 'ADVISED', ok: (s) => !!s.flags.cabLand, why: { ru: 'Бортпроводники не предупреждены.', en: 'Cabin crew not advised.' } },
+      { ch: 'A/THR', resp: (s) => (s.ac.athrActive ? 'SPEED' : 'OFF'), ok: T, why: { ru: '', en: '' } },
+      { ch: 'AUTO BRAKE', resp: (s) => ['OFF', 'LO', 'MED', 'MAX'][s.ac.autobrk], ok: (s) => s.ac.autobrk === 1 || s.ac.autobrk === 2, why: { ru: 'Автотормоз не взведён.', en: 'Autobrake not armed.' } },
+      { ch: 'ECAM MEMO', resp: () => 'LDG NO BLUE', ok: (s) => ldgMemoVisible(s) && leftMemo(s).every((l) => l.c === 'green'), why: { ru: 'В LDG MEMO синие пункты (или выше 2000 фт).', en: 'Blue items in the LDG MEMO (or above 2000 ft).' } },
+    ],
+  },
+  {
+    id: 'AFTER_LANDING',
+    name: 'AFTER LANDING',
+    flag: 'cl_AFTER_LANDING',
+    leg: 'arr',
+    items: [
+      { ch: 'FLAPS', resp: () => 'RETRACTED', ok: (s) => s.ac.landed && s.sw.FLAPS === 0, why: { ru: 'Закрылки не убраны.', en: 'Flaps not retracted.' } },
+      { ch: 'SPOILERS', resp: () => 'DISARMED', ok: (s) => s.ac.landed && s.sw.SPD_BRK === 1, why: { ru: 'Интерцепторы взведены.', en: 'Spoilers armed.' } },
+      { ch: 'APU', resp: () => 'START', ok: (s) => s.apu.starting || s.apu.avail, why: { ru: 'ВСУ не запущена.', en: 'APU not started.' } },
+      { ch: 'RADAR', resp: () => 'OFF', ok: (s) => s.sw.WX_SYS === 1, why: { ru: 'Метеорадар включён.', en: 'Radar on.' } },
+      { ch: 'PRED W/S', resp: () => 'OFF', ok: (s) => s.sw.WX_PWS === 0, why: { ru: 'PWS включён.', en: 'PWS on.' } },
+    ],
+  },
+  {
+    id: 'PARKING',
+    name: 'PARKING',
+    flag: 'cl_PARKING',
+    leg: 'arr',
+    items: [
+      { ch: 'APU BLEED', resp: () => 'ON', ok: (s) => s.sw.APU_BLEED === 1 && s.apu.avail, why: { ru: 'Отбор ВСУ выключен.', en: 'APU bleed off.' } },
+      { ch: 'ENGINES', resp: () => 'OFF', ok: (s) => s.sw.ENG1_MASTER === 0 && s.sw.ENG2_MASTER === 0, why: { ru: 'Двигатели не выключены.', en: 'Engines not shut down.' } },
+      { ch: 'SEAT BELTS', resp: () => 'OFF', ok: (s) => s.sw.SEAT_BELTS === 0, why: { ru: 'Табло ремней горит.', en: 'Seat belt sign on.' } },
+      { ch: 'EXT LT', resp: () => 'AS RQRD', ok: (s) => s.sw.BEACON === 0 && s.sw.STROBE <= 1, why: { ru: 'Маяк или стробы (ON) включены.', en: 'Beacon or strobes (ON) still on.' } },
+      { ch: 'FUEL PUMPS', resp: () => 'OFF', ok: (s) => ['L1', 'L2', 'C1', 'C2', 'R1', 'R2'].every((k) => s.sw[`FUEL_${k}`] === 0), why: { ru: 'Насосы включены.', en: 'Pumps on.' } },
+      { ch: 'PARK BRK AND CHOCKS', resp: (s) => (s.sw.PARK_BRK ? 'ON' : 'OFF') + (s.gnd.chocks ? ' / IN' : ''), ok: (s) => s.sw.PARK_BRK === 1 || s.gnd.chocks, why: { ru: 'Ни тормоза, ни колодок!', en: 'Neither parking brake nor chocks!' } },
+    ],
+  },
+  {
+    id: 'SECURING',
+    name: 'SECURING THE AIRCRAFT',
+    flag: 'cl_SECURING',
+    leg: 'arr',
+    items: [
+      { ch: 'OXYGEN', resp: () => 'OFF', ok: (s) => s.sw.OXY_CREW === 0, why: { ru: 'Кислород экипажа включён.', en: 'Crew oxygen on.' } },
+      { ch: 'EMER EXIT LT', resp: () => 'OFF', ok: (s) => s.sw.EMER_EXIT_LT === 0, why: { ru: '', en: '' } },
+      { ch: 'EFBs', resp: () => 'OFF', ok: T, why: { ru: '', en: '' } },
+      { ch: 'SIGNS', resp: () => 'OFF', ok: (s) => s.sw.SEAT_BELTS === 0 && s.sw.NO_SMOKING === 0, why: { ru: 'Табло включены.', en: 'Signs on.' } },
+      { ch: 'APU BLEED', resp: () => 'OFF', ok: (s) => s.sw.APU_BLEED === 0, why: { ru: '', en: '' } },
+      { ch: 'APU AND BAT', resp: () => 'OFF', ok: (s) => s.sw.APU_MASTER === 0, why: { ru: 'Сначала выключите ВСУ, затем аккумуляторы.', en: 'APU off first, then batteries.' } },
+    ],
+  },
 ];
+
+for (const c of CHECKLISTS) if (!c.leg) c.leg = 'dep';
+
+export function checklistsFor(s: SimState): Checklist[] {
+  if (s.type === 'c172') return C172_CHECKLISTS;
+  if (s.scn === 'arr') return CHECKLISTS.filter((c) => c.leg === 'arr');
+  if (s.scn === 'full') return CHECKLISTS;
+  return CHECKLISTS.filter((c) => c.leg === 'dep');
+}

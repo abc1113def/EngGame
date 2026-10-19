@@ -292,6 +292,23 @@ class AudioEngine {
     }
   }
 
+  /** Короткий выкрик без очереди (радиовысотомер) */
+  sayNow(text: string) {
+    if (!this.enabled) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (this.voice) u.voice = this.voice;
+      u.lang = 'en-US';
+      u.rate = 1.35;
+      u.pitch = 0.8;
+      u.volume = Math.min(1, this.volume + 0.2);
+      speechSynthesis.speak(u);
+    } catch {
+      /* ignore */
+    }
+  }
+
   /** Обновление непрерывных звуков (вызывается каждый кадр) */
   update(s: SimState, paused: boolean) {
     if (!this.ctx) return;

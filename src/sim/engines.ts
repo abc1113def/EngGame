@@ -34,7 +34,7 @@ export function n1Command(s: SimState, tla: number): number {
     if (!ac.onGround) return IDLE_N1;
     return IDLE_N1 + (70 - IDLE_N1) * clamp(-tla / 20, 0, 1);
   }
-  if (tla <= 0.5) return IDLE_N1 + (ac.onGround ? 0 : 6);
+  if (tla <= 0.5) return IDLE_N1 + (ac.onGround ? 0 : 3);
   if (ac.athrActive && tla <= TLA.CL + 0.6) {
     return s.flags.athrN1 != null ? (s.flags.athrN1 as number) : lim.cl;
   }

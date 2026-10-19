@@ -1,4 +1,4 @@
-import { vfe, speeds } from '../sim/flight';
+import { ilsDev, vfe, speeds } from '../sim/flight';
 import { attOk, dispPower, irOk } from '../sim/systems';
 import { useSimFrame } from '../ui/hooks';
 import { C, Screen, T, duMode, polar } from './common';
@@ -36,17 +36,52 @@ function Fma() {
           LVR CLB
         </T>
       )}
-      <T x={150} y={24} a="middle" c={C.g} s={17}>
-        {f.vert}
-      </T>
-      {f.vert === 'SRS' && !s.ac.onGround && (
+      {(f.vert === 'LAND' || f.vert === 'FLARE' || f.vert === 'ROLL OUT') && !f.lat ? (
+        <T x={200} y={24} a="middle" c={C.g} s={17}>
+          {f.vert}
+        </T>
+      ) : (
+        <T x={150} y={24} a="middle" c={C.g} s={17}>
+          {f.vert}
+        </T>
+      )}
+      {f.vArm && (
+        <T x={150} y={46} a="middle" c={C.b} s={14}>
+          {f.vArm}
+        </T>
+      )}
+      {f.lArm && (
+        <T x={250} y={46} a="middle" c={C.b} s={14}>
+          {f.lArm}
+        </T>
+      )}
+      {f.cat && (
+        <>
+          <T x={350} y={20} a="middle" s={14}>
+            {f.cat.split(' ')[0]}
+          </T>
+          {f.cat.split(' ')[1] && (
+            <T x={350} y={37} a="middle" s={14}>
+              {f.cat.split(' ')[1]}
+            </T>
+          )}
+        </>
+      )}
+      {s.leg === 'arr' && (s.fms.mda != null || s.fms.dh != null) && s.ac.alt - s.elev < 5000 && (
+        <T x={350} y={55} a="middle" s={13}>
+          {s.fms.dh != null ? `RADIO ${s.fms.dh}` : `BARO ${s.fms.mda}`}
+        </T>
+      )}
+      {f.vert === 'SRS' && !s.ac.onGround && s.leg === 'dep' && (
         <T x={150} y={46} a="middle" c={C.b} s={14}>
           CLB
         </T>
       )}
-      <T x={250} y={24} a="middle" c={C.g} s={17}>
-        {f.lat}
-      </T>
+      {f.lat && (
+        <T x={250} y={24} a="middle" c={C.g} s={17}>
+          {f.lat}
+        </T>
+      )}
       {f.lat === 'RWY' && s.fms.sid && (
         <T x={250} y={46} a="middle" c={C.b} s={14}>
           NAV
@@ -91,7 +126,9 @@ function Attitude({ ok }: { ok: boolean }) {
       );
   }
   const fd = s.fcu.fd && s.fdPitch != null && !s.ac.onGround;
+  const mins = s.leg === 'arr' ? (s.fms.mda ?? (s.fms.dh != null ? s.elev + s.fms.dh : null)) : null;
   const fdY = fd ? Math.max(-60, Math.min(60, -(s.fdPitch! - pitch) * K)) : 0;
+  const fdX = fd && s.leg === 'arr' ? Math.max(-60, Math.min(60, (((s.flags.fdRoll as number) || 0) - roll) * 2.4)) : 0;
   const ra = s.ac.alt - s.elev;
   return (
     <g>
@@ -124,7 +161,7 @@ function Attitude({ ok }: { ok: boolean }) {
       {fd && (
         <g>
           <line x1={185} y1={250 + fdY} x2={315} y2={250 + fdY} stroke={C.g} strokeWidth={3} />
-          <line x1={250} y1={190} x2={250} y2={310} stroke={C.g} strokeWidth={3} />
+          <line x1={250 + fdX} y1={190} x2={250 + fdX} y2={310} stroke={C.g} strokeWidth={3} />
         </g>
       )}
       {/* символ самолёта */}
@@ -134,9 +171,52 @@ function Attitude({ ok }: { ok: boolean }) {
         <rect x={245} y={245} width={10} height={10} />
       </g>
       {!s.ac.onGround && ra < 2500 && (
-        <T x={250} y={385} a="middle" c={ra < 400 ? C.a : C.g} s={18}>
-          {Math.round(ra / 10) * 10}
+        <T x={250} y={385} a="middle" c={mins && s.ac.alt <= mins ? C.a : C.g} s={18}>
+          {ra < 50 ? Math.round(ra) : Math.round(ra / 10) * 10}
         </T>
+      )}
+      {mins != null && !s.ac.onGround && s.ac.alt <= mins + 3 && s.ac.alt > s.elev + 5 && (
+        <T x={250} y={360} a="middle" c={C.a} s={15}>
+          MINIMUM
+        </T>
+      )}
+      <LsScales />
+    </g>
+  );
+}
+
+function LsScales() {
+  const s = useSimFrame(20);
+  if (!s.fcu.ls) return null;
+  const dev = ilsDev(s);
+  const ils = s.geo.ils;
+  const dots = [-2, -1, 1, 2];
+  return (
+    <g>
+      {/* глиссада */}
+      {dots.map((d) => (
+        <circle key={'g' + d} cx={356} cy={250 + d * 24} r={3.2} fill="none" stroke={C.w} strokeWidth={1.5} />
+      ))}
+      <line x1={349} y1={250} x2={363} y2={250} stroke={C.y} strokeWidth={2.5} />
+      {/* курсовой */}
+      {dots.map((d) => (
+        <circle key={'l' + d} cx={250 + d * 24} cy={404} r={3.2} fill="none" stroke={C.w} strokeWidth={1.5} />
+      ))}
+      <line x1={250} y1={397} x2={250} y2={411} stroke={C.y} strokeWidth={2.5} />
+      {dev && dev.gsValid && <path d={`M 356 ${250 + dev.gsDots * 24 - 9} l 6 9 l -6 9 l -6 -9 z`} fill={Math.abs(dev.gsDots) >= 2.5 ? 'none' : C.m} stroke={C.m} strokeWidth={1.5} />}
+      {dev && dev.locValid && <path d={`M ${250 - dev.locDots * 24 - 9} 404 l 9 -6 l 9 6 l -9 6 z`} fill={Math.abs(dev.locDots) >= 2.5 ? 'none' : C.m} stroke={C.m} strokeWidth={1.5} />}
+      {ils && dev && (
+        <>
+          <T x={136} y={392} s={13} c={C.m}>
+            {ils.ident}
+          </T>
+          <T x={136} y={408} s={13} c={C.m}>
+            {ils.freq}
+          </T>
+          <T x={136} y={424} s={13} c={C.m}>
+            {(Math.max(0, dev.dist) / 1852).toFixed(1)} NM
+          </T>
+        </>
       )}
     </g>
   );
@@ -185,6 +265,16 @@ function SpeedTape({ ok }: { ok: boolean }) {
           </T>
         )}
         {tgt != null && <path d={`M 106 ${y(tgt)} l 12 -8 v 16 z`} fill={C.m} />}
+        {!s.ac.onGround && s.sw.FLAPS === 1 && (
+          <T x={112} y={y(sp.S) + 6} c={C.g} s={15}>
+            S
+          </T>
+        )}
+        {!s.ac.onGround && (s.sw.FLAPS === 2 || s.sw.FLAPS === 3) && (
+          <T x={112} y={y(sp.F) + 6} c={C.g} s={15}>
+            F
+          </T>
+        )}
         {!s.ac.onGround && <rect x={104} y={y(sp.vls) } width={6} height={Math.max(0, (sp.vls - 30) * PX)} fill={C.a} opacity={0.9} />}
         {[...Array(12)].map((_, i) => (
           <rect key={i} x={104} y={y(vmax) - 400 + i * 34} width={6} height={17} fill={C.r} />
@@ -208,7 +298,12 @@ function AltTape({ ok }: { ok: boolean }) {
         ALT
       </T>
     );
-  const alt = s.ac.alt + (baro - s.atc.qnh) * 27;
+  const qnh = s.leg === 'arr' ? s.atc.arrQnh : s.atc.qnh;
+  const alt = s.ac.alt + (baro - qnh) * 27;
+  const blink = Math.floor(s.t * 2) % 2 === 0;
+  const tl = 6000;
+  const baroWarn = s.leg === 'arr' && !s.ac.onGround && ((s.fcu.baroStd && s.ac.alt < tl - 300) || (!s.fcu.baroStd && s.ac.alt > tl + 1000));
+  const mins = s.leg === 'arr' ? (s.fms.mda ?? (s.fms.dh != null ? s.elev + s.fms.dh : null)) : null;
   const PX = 0.11;
   const y = (a: number) => 250 - (a - alt) * PX;
   const els = [];
@@ -245,9 +340,15 @@ function AltTape({ ok }: { ok: boolean }) {
         {Math.round(alt / 10) * 10}
       </T>
       <rect x={378} y={402} width={84} height={22} fill="#000" />
-      <T x={381} y={420} c={C.b} s={15}>
-        {s.fcu.baroStd ? 'STD' : `QNH ${s.fcu.baro}`}
-      </T>
+      {!(baroWarn && blink) && (
+        <T x={381} y={420} c={C.b} s={15}>
+          {s.fcu.baroStd ? 'STD' : `QNH ${s.fcu.baro}`}
+        </T>
+      )}
+      {baroWarn && <rect x={378} y={403} width={84} height={21} fill="none" stroke={C.a} strokeWidth={1.5} />}
+      {/* земля (по радиовысотомеру) */}
+      {s.ac.alt - s.elev < 570 && !s.ac.onGround && <rect x={440} y={y(s.elev)} width={6} height={Math.max(0, 400 - y(s.elev))} fill={C.r} />}
+      {mins != null && <path d={`M 376 ${y(mins)} l -10 -6 v 12 z`} fill={C.m} />}
       {/* вариометр */}
       <path d="M 466 140 L 488 160 L 488 340 L 466 360 Z" fill="#3a4148" />
       {[-6000, -2000, -1000, 1000, 2000, 6000].map((v) => (

@@ -3,14 +3,39 @@ import { SCN } from '../sim/scenario';
 import { irOk } from '../sim/systems';
 import type { L, SimState, ViewId } from '../sim/types';
 
-export type PhaseId = 'emer' | 'power' | 'apu' | 'prep' | 'fms' | 'before' | 'start' | 'after' | 'taxi' | 'lineup' | 'takeoff';
+export type PhaseId =
+  | 'emer'
+  | 'power'
+  | 'apu'
+  | 'prep'
+  | 'fms'
+  | 'before'
+  | 'start'
+  | 'after'
+  | 'taxi'
+  | 'lineup'
+  | 'takeoff'
+  | 'appr'
+  | 'final'
+  | 'land'
+  | 'aland'
+  | 'park'
+  | 'secure'
+  | 'c_pre'
+  | 'c_start'
+  | 'c_taxi'
+  | 'c_runup'
+  | 'c_to'
+  | 'c_pattern'
+  | 'c_land'
+  | 'c_shut';
 export type StepKind = 'action' | 'check' | 'wait' | 'comm' | 'checklist';
 
 export interface Step {
   id: string;
   phase: PhaseId;
   kind: StepKind;
-  view?: ViewId | 'comms' | 'checklist' | 'mcdu';
+  view?: ViewId | 'comms' | 'checklist' | 'mcdu' | 'qrh';
   ctl?: string[];
   title: L;
   hint: L;
@@ -33,14 +58,30 @@ export const PHASES: { id: PhaseId; name: L }[] = [
   { id: 'taxi', name: { ru: '8. Руление', en: '8. Taxi' } },
   { id: 'lineup', name: { ru: '9. Исполнительный старт', en: '9. Line-up' } },
   { id: 'takeoff', name: { ru: '10. Взлёт', en: '10. Take-off' } },
+  { id: 'appr', name: { ru: '11. Подготовка к заходу', en: '11. Approach preparation' } },
+  { id: 'final', name: { ru: '12. Заход ILS', en: '12. ILS approach' } },
+  { id: 'land', name: { ru: '13. Посадка и пробег', en: '13. Landing & rollout' } },
+  { id: 'aland', name: { ru: '14. После посадки', en: '14. After landing' } },
+  { id: 'park', name: { ru: '15. Стоянка', en: '15. Parking' } },
+  { id: 'secure', name: { ru: '16. Обесточивание (Cold & Dark)', en: '16. Securing (cold & dark)' } },
+  { id: 'c_pre', name: { ru: '1. Предполётный осмотр', en: '1. Preflight inspection' } },
+  { id: 'c_start', name: { ru: '2. Запуск двигателя', en: '2. Engine start' } },
+  { id: 'c_taxi', name: { ru: '3. Руление', en: '3. Taxi' } },
+  { id: 'c_runup', name: { ru: '4. Перед взлётом (опробование)', en: '4. Before take-off (run-up)' } },
+  { id: 'c_to', name: { ru: '5. Взлёт', en: '5. Take-off' } },
+  { id: 'c_pattern', name: { ru: '6. Полёт по кругу', en: '6. Traffic pattern' } },
+  { id: 'c_land', name: { ru: '7. Посадка', en: '7. Landing' } },
+  { id: 'c_shut', name: { ru: '8. Выключение и стоянка', en: '8. Shutdown & securing' } },
 ];
+
+export const ARR_PHASES: PhaseId[] = ['appr', 'final', 'land', 'aland', 'park', 'secure'];
 
 const r = (ru: string, en: string): L => ({ ru, en });
 const voc = (s: SimState, i: number) => 23.6 + 3.4 * s.elec.bat[i].charge;
 const bothRun = (s: SimState) => s.eng[0].running && s.eng[1].running;
 const anyFire = (s: SimState) => s.eng.some((e) => e.fire || e.fireOut);
 
-export const STEPS: Step[] = [
+export const STEPS_DEP: Step[] = [
   // ===================== АВАРИЯ: ПОЖАР =====================
   ...(['THR', 'PARK', 'ATC', 'CAB', 'MASTER', 'PB', 'AGENT', 'EVAC'] as const).map((k): Step => {
     const n = (s: SimState) => (s.eng[0].fire || s.eng[0].fireOut ? 1 : 2);
@@ -251,7 +292,7 @@ export const STEPS: Step[] = [
   { id: 'reach', phase: 'takeoff', kind: 'wait', view: 'front', title: r('Набор 3000 фт над аэродромом', 'Climb to 3000 ft above field'), hint: r('Следуйте директору, держите скорость V2+10 → 250.', 'Follow the FD, keep V2+10 → 250 kt.'), done: (s) => !s.ac.onGround && s.ac.alt - s.elev >= 3000 },
 ];
 
-export const STEP_BY_ID: Record<string, Step> = Object.fromEntries(STEPS.map((x) => [x.id, x]));
+
 
 export function stepVisible(s: SimState, st: Step) {
   return !st.show || st.show(s);

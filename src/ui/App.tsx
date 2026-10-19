@@ -7,17 +7,38 @@ import { UI } from '../i18n/ui';
 import { Front } from '../panels/Front';
 import { Overhead } from '../panels/Overhead';
 import { Pedestal } from '../panels/Pedestal';
+import { OutView } from '../panels/Out';
+import { C172Panel } from '../panels/C172';
+import { Walkaround } from '../panels/Walk';
+import { QrhBook } from './Qrh';
 import { ECAM_BY_ID } from '../sim/ecam';
 import { TLA } from '../sim/engines';
-import { SCN } from '../sim/scenario';
 import { sim, type SimEvent } from '../sim/sim';
-import type { ViewId } from '../sim/types';
+import type { AircraftType, L, Scenario, ViewId } from '../sim/types';
 import { HlCtx, getSettings, setSettings, useSettings, useSim, useT, tr } from './hooks';
 import { Debrief, StartMenu, Tooltip } from './Menus';
 import { SidePanel, type Tab } from './SidePanel';
 import { uiStore, useUiStore } from './store';
 
-const VIEW_H: Record<ViewId, number> = { ovhd: 1250, front: 960, ped: 960 };
+const VIEW_H: Record<ViewId, number> = { ovhd: 1250, front: 960, ped: 960, out: 960, c172: 1000, walk: 900 };
+export const VIEWS: Record<AircraftType, ViewId[]> = { a320: ['ovhd', 'front', 'ped', 'out'], c172: ['walk', 'c172', 'out'] };
+
+function ViewBody({ view }: { view: ViewId }) {
+  switch (view) {
+    case 'ovhd':
+      return <Overhead />;
+    case 'front':
+      return <Front />;
+    case 'ped':
+      return <Pedestal />;
+    case 'out':
+      return <OutView />;
+    case 'c172':
+      return <C172Panel />;
+    case 'walk':
+      return <Walkaround />;
+  }
+}
 
 function Viewport({ view }: { view: ViewId }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -39,7 +60,7 @@ function Viewport({ view }: { view: ViewId }) {
     <div className="viewport" ref={ref} style={{ overflowY: scroll ? 'auto' : 'hidden' }}>
       <div className="scaler" style={{ width: 1600 * sc, height: H * sc }}>
         <div style={{ transform: `scale(${sc})`, transformOrigin: '0 0', width: 1600, height: H }}>
-          {view === 'ovhd' ? <Overhead /> : view === 'front' ? <Front /> : <Pedestal />}
+          <ViewBody view={view} />
         </div>
       </div>
     </div>
@@ -77,7 +98,16 @@ function Score({ game }: { game: Game }) {
   return <span className="tb-score">{game.score}</span>;
 }
 
-const unitName: Record<string, string> = { ATIS: 'ATIS', DEL: 'DELIVERY', GND: 'GROUND', TWR: 'TOWER', CREW: 'GROUND CREW', CAB: 'CABIN', PA: 'PA', SYS: '' };
+const unitName: Record<string, string> = { ATIS: 'ATIS', DEL: 'DELIVERY', GND: 'GROUND', TWR: 'TOWER', APP: 'APPROACH', CREW: 'GROUND CREW', CAB: 'CABIN', PA: 'PA', PAX: 'PASSENGER', SYS: '' };
+
+const START_MSG: Record<string, L> = {
+  a320_dep: { ru: 'Самолёт полностью обесточен. Начните с проверки и включения аккумуляторов (BAT 1, BAT 2).', en: 'The aircraft is cold & dark. Start by checking and switching on the batteries (BAT 1, BAT 2).' },
+  a320_full: { ru: 'Полный рейс Тулуза → Париж: от Cold & Dark до Cold & Dark. Начните с аккумуляторов (BAT 1, BAT 2).', en: 'Full flight Toulouse → Paris, cold & dark to cold & dark. Start with the batteries (BAT 1, BAT 2).' },
+  a320_arr: { ru: 'Снижение к Парижу-Орли, 4000 фт, автопилот включён. Прослушайте ATIS и подготовьте заход ILS 06.', en: 'Descending towards Paris Orly at 4000 ft, autopilot on. Listen to the ATIS and prepare the ILS 06 approach.' },
+  c172_pattern: { ru: 'Cessna 172 на стоянке в Ласборде. Начните с предполётного осмотра (вид 1).', en: 'Cessna 172 parked at Lasbordes. Start with the pre-flight walk-around (view 1).' },
+};
+const RA_CALLS = [2500, 1000, 500, 400, 300, 200, 100, 50, 40, 30, 20, 10];
+const RA_WORDS: Record<number, string> = { 2500: 'twenty five hundred', 1000: 'one thousand', 500: 'five hundred', 400: 'four hundred', 300: 'three hundred', 200: 'two hundred', 100: 'one hundred', 50: 'fifty', 40: 'forty', 30: 'thirty', 20: 'twenty', 10: 'ten' };
 
 export function App() {
   const settings = useSettings();
@@ -90,7 +120,11 @@ export function App() {
   const [paused, setPaused] = useState(false);
   const [rate, setRate] = useState(1);
   const [flash, setFlash] = useState<string[]>([]);
+  const [qrh, setQrh] = useState(false);
+  const [interlude, setInterlude] = useState<L | null>(null);
   const gameRef = useRef<Game | null>(null);
+  const type = useSim((s) => s.type);
+  const views = VIEWS[type];
 
   useEffect(() => audio.setEnabled(settings.sound, settings.volume), [settings.sound, settings.volume]);
 
@@ -102,7 +136,7 @@ export function App() {
       const dt = (now - last) / 1000;
       last = now;
       const ph = sim.s.gnd.phase;
-      sim.rate = ph === 'runway' || ph === 'airborne' || ph === 'lineup' ? 1 : rateRef.current;
+      sim.rate = ph === 'runway' || ph === 'airborne' || ph === 'lineup' || !sim.s.ac.onGround ? 1 : rateRef.current;
       sim.frame(dt);
       audio.update(sim.s, sim.paused || !!sim.s.result);
       raf = requestAnimationFrame(loop);
@@ -165,6 +199,20 @@ export function App() {
         case 'irAlignFault':
           uiStore.toast({ ru: 'Выставка ИНС сбита движением самолёта! Нужно OFF → NAV и выставка заново.', en: 'IRS alignment lost: aircraft moved! Set OFF → NAV and realign.' }, 'pen', 7000);
           break;
+        case 'cruiseSkip':
+          sim.paused = true;
+          setInterlude({
+            ru: 'Набор эшелона 330, крейсерский полёт над Францией… Через 55 минут: снижение к Парижу. Самолёт на 4000 фт, автопилот включён. Прослушайте ATIS Орли и подготовьте заход ILS 06.',
+            en: 'Climb to FL330 and cruise across France… 55 minutes later: descending towards Paris. The aircraft is at 4000 ft with the autopilot on. Listen to the Orly ATIS and prepare the ILS 06 approach.',
+          });
+          break;
+        case 'approachAgain':
+          uiStore.toast({ ru: 'Уход на второй круг выполнен. Диспетчер выводит вас на повторный заход ILS 06.', en: 'Go-around flown. ATC vectors you for another ILS 06 approach.' }, 'info', 8000);
+          raDone.current.clear();
+          break;
+        case 'landing':
+          if (e.td) uiStore.log(s.t, 'info', { ru: `Касание: ${Math.round(e.td.vs)} фт/мин, ${Math.round(e.td.along)} м от торца`, en: `Touchdown: ${Math.round(e.td.vs)} fpm, ${Math.round(e.td.along)} m past threshold` });
+          break;
         case 'crossHold':
           if (!s.atc.lineupClear) uiStore.toast({ ru: 'Вы пересекли линию предварительного старта без разрешения!', en: 'You crossed the holding point without clearance!' }, 'pen', 6000);
           break;
@@ -196,20 +244,50 @@ export function App() {
           audio.say('Rotate');
         }
       }
-      if (!s.ac.onGround && !f.coPC && s.ac.vs > 300 && s.ac.alt - s.elev > 30) {
+      if (!s.ac.onGround && !f.coPC && s.ac.vs > 300 && s.ac.alt - s.elev > 30 && s.leg === 'dep' && s.type === 'a320') {
         f.coPC = true;
         audio.say('Positive climb');
       }
+      // автоматические выкрики радиовысотомера на заходе
+      if (s.type === 'a320' && s.leg === 'arr' && !s.ac.onGround && s.ac.vs < -100) {
+        const ra = s.ac.alt - s.elev;
+        for (const h of RA_CALLS) {
+          if (ra <= h && ra > h - 60 && !raDone.current.has(h)) {
+            for (const x of RA_CALLS) if (x >= h) raDone.current.add(x);
+            audio.sayNow(RA_WORDS[h]);
+            break;
+          }
+        }
+        const mins = s.fms.mda ?? (s.fms.dh != null ? s.elev + s.fms.dh : null);
+        if (mins != null) {
+          if (s.ac.alt <= mins + 100 && s.ac.alt > mins + 40 && !raDone.current.has(-1)) {
+            raDone.current.add(-1);
+            audio.sayNow('hundred above');
+          }
+          if (s.ac.alt <= mins && s.ac.alt > mins - 60 && !raDone.current.has(-2)) {
+            raDone.current.add(-2);
+            audio.sayNow('minimum');
+          }
+        }
+        const idle = s.sw.TL1 <= 0.5 && s.sw.TL2 <= 0.5;
+        if (ra < 20 && !idle && s.t - retardT.current > 1.3) {
+          retardT.current = s.t;
+          audio.sayNow('retard');
+        }
+      }
+      if (s.ac.onGround) raDone.current.clear();
     });
   }, []);
+  const raDone = useRef(new Set<number>());
+  const retardT = useRef(0);
 
-  const start = useCallback((mode: Mode) => {
+  const start = useCallback((mode: Mode, ac: AircraftType, scn: Scenario) => {
     audio.init();
     uiStore.reset();
     gameRef.current?.stop();
     const st = getSettings();
     const seed = (Math.random() * 1e9) | 0;
-    sim.reset(seed, st.failures, st.fastAlign);
+    sim.reset(seed, st.failures, st.fastAlign, ac, scn);
     const g = new Game(sim, mode);
     g.start();
     g.onEnd((r) => setTimeout(() => setReport(r), 1500));
@@ -217,11 +295,13 @@ export function App() {
     setGame(g);
     setReport(null);
     setMenu(false);
-    setView('ovhd');
+    setView(ac === 'c172' ? 'walk' : scn === 'arr' ? 'front' : 'ovhd');
     setTab('steps');
     setPaused(false);
+    setInterlude(null);
+    raDone.current.clear();
     sim.paused = false;
-    uiStore.toast(mode === 'tutorial' ? { ru: 'Самолёт полностью обесточен. Начните с проверки и включения аккумуляторов (BAT 1, BAT 2).', en: 'The aircraft is cold & dark. Start by checking and switching on the batteries (BAT 1, BAT 2).' } : { ru: 'Экзамен начат. Удачи, капитан!', en: 'Exam started. Good luck, captain!' }, 'info', 8000);
+    uiStore.toast(mode === 'tutorial' ? START_MSG[`${ac}_${scn}`] : { ru: 'Экзамен начат. Удачи, капитан!', en: 'Exam started. Good luck, captain!' }, 'info', 9000);
   }, []);
 
   const togglePause = useCallback(() => {
@@ -271,15 +351,30 @@ export function App() {
           return;
         }
       }
-      if (k === '1') setView('ovhd');
-      else if (k === '2') setView('front');
-      else if (k === '3') setView('ped');
+      const c172 = sim.s.type === 'c172';
+      const vs = VIEWS[sim.s.type];
+      if (/^[1-9]$/.test(k) && vs[+k - 1]) setView(vs[+k - 1]);
+      else if (k === 'q') setQrh((q) => !q);
+      else if (k === 'Escape') setQrh(false);
+      else if (c172 && e.shiftKey && (k === 'F2' || k === 'PageDown')) sim.setLever('C_MIX', sim.s.sw.C_MIX - 0.05);
+      else if (c172 && e.shiftKey && (k === 'F3' || k === 'PageUp')) sim.setLever('C_MIX', sim.s.sw.C_MIX + 0.05);
+      else if (c172 && k === 'F1') sim.setLever('C_THR', 0);
+      else if (c172 && (k === 'F2' || k === 'PageDown')) sim.setLever('C_THR', sim.s.sw.C_THR - 0.05);
+      else if (c172 && (k === 'F3' || k === 'PageUp')) sim.setLever('C_THR', sim.s.sw.C_THR + 0.05);
+      else if (c172 && k === 'F4') sim.setLever('C_THR', 1);
+      else if (c172 && k === '[') sim.knob('C_TRIM', -1);
+      else if (c172 && k === ']') sim.knob('C_TRIM', 1);
+      else if (c172 && k === 'p') sim.toggle('C_PARK');
+      else if (c172 && k === 'f') sim.setSw('C_FLAPS', sim.s.sw.C_FLAPS + 1);
+      else if (c172 && k === 'r') sim.setSw('C_FLAPS', sim.s.sw.C_FLAPS - 1);
       else if (k === 'F1') sim.setThrust(TLA.IDLE);
       else if (k === 'F2' || k === 'PageDown') sim.stepThrust(-1);
       else if (k === 'F3' || k === 'PageUp') sim.stepThrust(1);
       else if (k === 'F4') sim.setThrust(TLA.TOGA);
       else if (k === 'p') sim.toggle('PARK_BRK');
       else if (k === 'g') sim.toggle('GEAR');
+      else if (k === 'f') sim.setSw('FLAPS', sim.s.sw.FLAPS + 1);
+      else if (k === 'r') sim.setSw('FLAPS', sim.s.sw.FLAPS - 1);
       else if (k === ' ') togglePause();
       else if (keyMap[k]) sim.s.keys[keyMap[k]] = true;
       else return;
@@ -315,6 +410,7 @@ export function App() {
     if (st.view === 'comms') setTab('comms');
     else if (st.view === 'checklist') setTab('checklists');
     else if (st.view === 'mcdu') setView('ped');
+    else if (st.view === 'qrh') setQrh(true);
     else if (st.view) setView(st.view);
     if (st.ctl) {
       setFlash(st.ctl);
@@ -322,14 +418,15 @@ export function App() {
     }
   };
   const stepView = curStep && game?.mode === 'tutorial' ? (curStep.view === 'mcdu' ? 'ped' : curStep.view) : null;
+  const title = type === 'c172' ? '✈ CESSNA 172 · LFCL' : '✈ A320 · COLD & DARK';
 
   return (
     <HlCtx.Provider value={hl}>
       <div className="app">
         <header className="topbar">
-          <div className="tb-title">✈ A320 · COLD &amp; DARK</div>
+          <div className="tb-title">{title}</div>
           <nav className="tb-views">
-            {(['ovhd', 'front', 'ped'] as ViewId[]).map((v, i) => (
+            {views.map((v, i) => (
               <button key={v} className={`${view === v ? 'sel' : ''} ${stepView === v && view !== v ? 'pulse' : ''}`} onClick={() => setView(v)}>
                 <kbd>{i + 1}</kbd> {t(UI[v])}
               </button>
@@ -351,6 +448,9 @@ export function App() {
               ))}
             </span>
             <button onClick={togglePause}>{paused ? '▶' : '❚❚'}</button>
+            <button className={qrh ? 'sel' : ''} onClick={() => setQrh(!qrh)} title="Q">
+              📕 {type === 'c172' ? 'POH' : 'QRH'}
+            </button>
             <button onClick={() => setSettings({ sound: !settings.sound })} title={t(UI.sound)}>
               {settings.sound ? '🔊' : '🔇'}
             </button>
@@ -370,6 +470,34 @@ export function App() {
           {game && <SidePanel game={game} tab={tab} setTab={setTab} onShow={onShow} />}
         </main>
         {paused && !menu && <div className="paused">{t(UI.paused)}</div>}
+        {qrh && !menu && <QrhBook game={game} onClose={() => setQrh(false)} />}
+        {interlude && !menu && (
+          <div className="overlay">
+            <div className="menu interlude">
+              <h1>✈ FL330 · LFBO → LFPO</h1>
+              <div className="cruise-anim">
+                <svg viewBox="0 0 400 60" width={400} height={60}>
+                  <path d="M10 50 Q 200 -10 390 50" fill="none" stroke="#36e3ff" strokeDasharray="5 6" />
+                  <circle cx={10} cy={50} r={4} fill="#fff" />
+                  <circle cx={390} cy={50} r={4} fill="#fff" />
+                  <text x={10} y={40} fill="#ccc" fontSize={11}>LFBO</text>
+                  <text x={360} y={40} fill="#ccc" fontSize={11}>LFPO</text>
+                </svg>
+              </div>
+              <p>{t(interlude)}</p>
+              <button
+                className="big primary"
+                onClick={() => {
+                  setInterlude(null);
+                  setView('front');
+                  sim.paused = paused;
+                }}
+              >
+                {t(UI.resume)} ▶
+              </button>
+            </div>
+          </div>
+        )}
         <Toasts />
         <Tooltip />
         {menu && <StartMenu onStart={start} />}
@@ -386,7 +514,6 @@ export function App() {
         )}
         <div className="narrow">{tr(UI.desktop, settings.lang)}</div>
       </div>
-      <span style={{ display: 'none' }}>{SCN.callsign}</span>
     </HlCtx.Provider>
   );
 }

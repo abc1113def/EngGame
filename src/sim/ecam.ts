@@ -18,6 +18,7 @@ export interface EcamDef {
   page?: string;
   phases?: number[]; // в каких фазах FWC допускается
   inop?: string[];
+  always?: boolean;
 }
 
 const dots = (a: string, b: string) => a + '.'.repeat(Math.max(2, 22 - a.length - b.length)) + b;
@@ -203,6 +204,25 @@ export const ECAM_DEFS: EcamDef[] = [
     sub: (s) => `VFE.................${vfe(s)}`,
     cond: (s) => !s.ac.onGround && s.ac.ias > vfe(s) + 4,
   },
+  {
+    id: 'LG_NOT_DOWN',
+    level: 'warn',
+    sys: 'L/G',
+    title: 'L/G GEAR NOT DOWN',
+    cond: (s) => !s.ac.onGround && s.leg === 'arr' && s.ac.gear < 0.99 && (s.ac.flaps > 25 || (s.ac.alt - s.elev < 750 && Math.max(s.sw.TL1, s.sw.TL2) < 5)),
+    always: true,
+  },
+  {
+    id: 'LG_NOT_LOCKED',
+    level: 'caut',
+    sys: 'L/G',
+    title: 'L/G GEAR NOT DOWNLOCKED',
+    cond: (s) => !s.ac.onGround && s.sw.GEAR === 1 && !!s.flags.lgJam && s.ac.gear < 0.99 && s.t - ((s.flags.gearDownT as number) ?? s.t) > 30,
+    page: 'WHEEL',
+    actions: (s) => [act('L/G LEVER', 'UP', s.sw.GEAR === 0 || ((s.flags.gravityCrank as number) ?? 0) >= 1), act('L/G GRAVITY EXTN', '3 TURNS CW', ((s.flags.gravityCrank as number) ?? 0) >= 3), act('L/G LEVER', 'DOWN', s.sw.GEAR === 1 && ((s.flags.gravityCrank as number) ?? 0) >= 3)],
+    inop: ['L/G RETRACT'],
+    always: true,
+  },
   startFault(1),
   startFault(2),
   engFail(1),
@@ -303,6 +323,11 @@ export const ECAM_BY_ID: Record<string, EcamDef> = Object.fromEntries(ECAM_DEFS.
 // ============================ фазы FWC ============================
 function fwcPhase(s: SimState): number {
   const ac = s.ac;
+  if (ac.landed) {
+    if (anyRunning(s)) return ac.ias > 80 ? 8 : 9;
+    return 10;
+  }
+  if (!ac.onGround && s.leg === 'arr') return ac.alt - s.elev < 800 ? 7 : 6;
   if (!ac.onGround) return ac.alt - s.elev < 1500 && !s.flags.passed1500 ? 5 : 6;
   if (s.flags.toPowerSet && !toPower(s) && ac.liftoffT === 0) {
     return ac.ias > 80 ? 8 : s.ac.stopped ? 9 : 8;
@@ -328,7 +353,7 @@ export function updEcam(s: SimState, dt: number, emit: Emit) {
     for (const d of ECAM_DEFS) {
       if (d.phases && !d.phases.includes(ec.phase)) continue;
       // предупреждения ПОС и тестовые проверки не подавляются; остальные — в фазах 4/5
-      if ((ec.phase === 4 || ec.phase === 5) && d.level === 'caut') continue;
+      if ((ec.phase === 4 || ec.phase === 5 || ec.phase === 7) && d.level === 'caut' && !d.always) continue;
       if (ec.emerCanc.has(d.id)) continue;
       if (d.cond(s)) now.add(d.id);
     }
@@ -400,7 +425,22 @@ export function toMemoVisible(s: SimState) {
   return (ec.firstEngStartT >= 0 && s.eng[0].running && s.eng[1].running && s.t - (s.flags.bothRunningT as number) > 120) || s.t - ec.toConfigPressed < 120 || !!s.flags.toMemoShown;
 }
 
+export function ldgMemoVisible(s: SimState) {
+  return s.leg === 'arr' && !s.ac.onGround && s.ac.alt - s.elev < 2000 && !s.flags.ga;
+}
+
 export function leftMemo(s: SimState): MemoLine[] {
+  if (ldgMemoVisible(s)) {
+    const full = s.fms.ldgConf === 4;
+    const flapsOk = full ? s.ac.flaps > 38 : s.ac.flaps > 18 && s.sw.FLAPS === 3;
+    return [
+      s.ac.gear > 0.99 ? { t: 'LDG LDG GEAR DN', c: 'green' } : { t: 'LDG LDG GEAR......DN', c: 'blue' },
+      s.sw.SEAT_BELTS === 1 && s.sw.NO_SMOKING > 0 ? { t: '    SIGNS ON', c: 'green' } : { t: '    SIGNS.........ON', c: 'blue' },
+      s.gnd.cabinReady ? { t: '    CABIN READY', c: 'green' } : { t: '    CABIN......CHECK', c: 'blue' },
+      s.ac.gndSplrsArmed ? { t: '    SPLRS ARM', c: 'green' } : { t: '    SPLRS........ARM', c: 'blue' },
+      flapsOk ? { t: full ? '    FLAPS FULL' : '    FLAPS CONF 3', c: 'green' } : { t: full ? '    FLAPS.......FULL' : '    FLAPS.....CONF 3', c: 'blue' },
+    ];
+  }
   if (!toMemoVisible(s)) return [];
   s.flags.toMemoShown = true;
   const ab = s.ac.autobrk === 3;
@@ -421,6 +461,8 @@ export function rightMemo(s: SimState): MemoLine[] {
   const R: MemoLine[] = [];
   const ph = s.ecam.phase;
   if (ph >= 3 && ph <= 5) R.push({ t: 'T.O INHIBIT', c: 'magenta' });
+  if (ph === 7 || ph === 8) R.push({ t: 'LDG INHIBIT', c: 'magenta' });
+  if (s.ac.autobrk > 0 && s.ac.landed && s.ac.autobrkActive) R.push({ t: 'AUTO BRK ' + ['', 'LO', 'MED', 'MAX'][s.ac.autobrk], c: 'green' });
   const m = alignMinutes(s);
   const alignFault = s.adirs.ir.some((ir) => ir.fault);
   if (alignFault) R.push({ t: 'IRS ALIGN FAULT', c: 'amber' });
@@ -433,9 +475,10 @@ export function rightMemo(s: SimState): MemoLine[] {
   if (s.sw.SEAT_BELTS === 1) R.push({ t: 'SEAT BELTS', c: 'green' });
   if (s.sw.NO_SMOKING > 0) R.push({ t: 'NO SMOKING', c: 'green' });
   if (s.ac.gndSplrsArmed && ph >= 2) R.push({ t: 'GND SPLRS ARMED', c: 'green' });
-  if (s.apu.avail && s.ecam.phase <= 2) R.push({ t: 'APU AVAIL', c: 'green' });
+  if (s.apu.avail && (s.ecam.phase <= 2 || s.ecam.phase >= 9)) R.push({ t: 'APU AVAIL', c: 'green' });
   if (s.bleed.apuValve) R.push({ t: 'APU BLEED', c: 'green' });
   if (s.hyd.ptu) R.push({ t: 'HYD PTU', c: 'green' });
+  if (!s.ac.onGround && s.sw.LAND_L === 2 && s.sw.LAND_R === 2 && s.leg === 'arr') R.push({ t: 'LDG LT', c: 'green' });
   if (s.sw.PARK_BRK === 1 && s.ac.onGround) R.push({ t: 'PARK BRK', c: anyRunning(s) && toPower(s) ? 'amber' : 'green' });
   if (s.sw.ENG1_AI || s.sw.ENG2_AI) R.push({ t: 'ENG A.ICE', c: 'green' });
   if (s.sw.WING_AI) R.push({ t: 'WING A.ICE', c: 'green' });
@@ -470,6 +513,9 @@ export function autoSdPage(s: SimState): string {
   const starting = s.eng.some((e) => ['crank', 'fuel', 'accel', 'abort'].includes(e.phase));
   if (starting || (s.sw.ENG_MODE === 2 && ec.phase <= 2)) return 'ENG';
   if (s.sw.APU_MASTER === 1 && (s.apu.starting || !s.apu.avail || s.t - ((s.flags.apuAvailT as number) ?? -99) < 10) && ec.phase <= 2) return 'APU';
+  if (ec.phase === 10) return 'DOOR';
+  if (ec.phase >= 8 && ec.phase <= 9) return 'WHEEL';
+  if (s.leg === 'arr' && !s.ac.onGround && (s.sw.GEAR === 1 || s.ac.alt - s.elev < 800)) return 'WHEEL';
   if (ec.phase === 1) return 'DOOR';
   if (ec.phase === 2) return s.t - ((s.flags.fctlMoveT as number) ?? -99) < 20 ? 'F/CTL' : 'WHEEL';
   if (ec.phase >= 3 && ec.phase <= 5) return 'ENG';

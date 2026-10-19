@@ -7,7 +7,7 @@ import { mcduKey, mcduLsk } from './fms';
 import { comms, updFailures, updGround } from './ground';
 import { createState } from './state';
 import { annPower, clamp, updAdirs, updApu, updBleed, updElec, updFuel, updHyd } from './systems';
-import type { FailureLevel, SimState } from './types';
+import type { AircraftType, FailureLevel, Scenario, SimState } from './types';
 
 export type SimEvent = { type: string; [k: string]: any };
 
@@ -42,8 +42,8 @@ export class Sim {
     this.s = createState(1, 'off', true);
   }
 
-  reset(seed: number, failures: FailureLevel, fastAlign: boolean) {
-    this.s = createState(seed, failures, fastAlign);
+  reset(seed: number, failures: FailureLevel, fastAlign: boolean, type: AircraftType = 'a320', scn: Scenario = 'dep') {
+    this.s = createState(seed, failures, fastAlign, type, scn);
     this.emit({ type: 'reset' });
     updAnn(this.s);
     this.notify();
@@ -145,6 +145,7 @@ export class Sim {
     this.ui(d.kind === 'pb' || d.kind === 'guard' ? 'pb' : d.kind === 'rotary' ? 'knob' : d.kind === 'lever' ? 'lever' : 'toggle');
     // особые эффекты
     if (id === 'APU_MASTER' && v === 0) s.apu.startReq = false;
+    if (id === 'GEAR' && v === 1) s.flags.gearDownT = s.t;
     if (id === 'ELAC1') {
       if (v === 0) s.flags.elacOff = true;
       else if (s.flags.elacOff) {
@@ -308,6 +309,9 @@ export class Sim {
         }
         break;
       }
+      case 'GRAVITY_CRANK':
+        s.flags.gravityCrank = ((s.flags.gravityCrank as number) ?? 0) + 1;
+        break;
       case 'APU_AGENT1':
         if (s.sw.APU_FIRE === 1) s.flags.apuAgent = true;
         break;
@@ -392,6 +396,15 @@ export class Sim {
     }
     this.ui('knob');
     this.emit({ type: 'knob', id, delta });
+  }
+
+  /** Плавный рычаг 0..1 (РУД и смесь Cessna) */
+  setLever(id: string, v: number) {
+    const s = this.s;
+    const nv = clamp(v, 0, 1);
+    if (Math.abs((s.sw[id] ?? 0) - nv) < 1e-4) return;
+    s.sw[id] = nv;
+    this.emit({ type: 'lever', id, v: nv });
   }
 
   /** Рычаги РУД */

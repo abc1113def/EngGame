@@ -1871,3 +1871,17 @@ table.keys td {
   background: repeating-linear-gradient(135deg, rgba(255, 70, 70, 0.35) 0 7px, rgba(120, 20, 20, 0.35) 7px 14px);
   border: 1px solid rgba(255, 120, 120, 0.6);
 }
+
+/* аварийный выпуск шасси */
+.crankw { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.crank { width: 46px; height: 46px; border-radius: 50%; background: radial-gradient(#3b4249, #1c2126); border: 2px solid #c03030; position: relative; cursor: pointer; }
+.crank-arm { position: absolute; left: 20px; top: 4px; width: 6px; height: 20px; background: #d8d8d8; border-radius: 3px; transform-origin: 3px 19px; transition: transform 0.4s; }
+.crank-n { font-size: 11px; color: #ccc; }
+
+/* выбор сценария */
+.mission-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.mode-card.mission { min-height: 112px; }
+.mode-card .small { font-size: 11px; margin-top: 6px; }
+.menu.interlude { max-width: 620px; text-align: center; }
+.menu.interlude p { line-height: 1.5; font-size: 15px; }
+.cruise-anim svg { max-width: 100%; }

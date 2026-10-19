@@ -1,15 +1,26 @@
-import { SCN } from './scenario';
+import { ilsDev } from './flight';
+import { SCN, SCN_ARR, SCN_C172 } from './scenario';
 import type { Emit } from './systems';
 import type { L, SimState } from './types';
 
-export type Unit = 'ATIS' | 'DEL' | 'GND' | 'TWR' | 'CREW' | 'CAB' | 'PA' | 'SYS';
+export type Unit = 'ATIS' | 'DEL' | 'GND' | 'TWR' | 'APP' | 'CREW' | 'CAB' | 'PA' | 'SYS';
 
 const fq = (f: number) => (f / 1000).toFixed(3);
 export const freqStr = fq;
 
+export function freqTable(s: SimState): Record<string, number> {
+  if (s.type === 'c172') return SCN_C172.freqs;
+  return s.leg === 'arr' ? SCN_ARR.freqs : SCN.freqs;
+}
+
 export function radioUnit(s: SimState): Unit | '' {
+  if (s.type === 'c172') {
+    if (s.c.busV < 20 || s.sw.C_AVIONICS1 !== 1) return '';
+    for (const [k, v] of Object.entries(SCN_C172.freqs)) if (v === s.c.com) return k as Unit;
+    return '';
+  }
   if (s.sw.RMP_ON !== 1 || !s.elec.dcEss) return '';
-  for (const [k, v] of Object.entries(SCN.freqs)) if (v === s.radio.active) return k as Unit;
+  for (const [k, v] of Object.entries(freqTable(s))) if (v === s.radio.active) return k as Unit;
   return '';
 }
 
@@ -66,6 +77,25 @@ function applyCode(s: SimState, code: string, emit: Emit) {
     case 'cabinReady':
       g.cabinReady = true;
       break;
+    case 'appClear':
+      a.appClear = true;
+      break;
+    case 'ldgClear':
+      a.ldgClear = true;
+      break;
+    case 'taxiIn':
+      a.taxiInClear = true;
+      break;
+    case 'disarm':
+      g.slidesArmed = false;
+      break;
+    case 'chocks':
+      g.chocks = true;
+      g.headset = true;
+      break;
+    case 'doorOpen':
+      g.doors.L1 = true;
+      break;
   }
   emit({ type: 'atcApply', code });
 }
@@ -79,8 +109,12 @@ export function comms(s: SimState, id: string, emit: Emit): boolean {
   const unit = radioUnit(s);
   const cs = C(s);
   const noRadio = (need: Unit) => {
-    if (s.sw.RMP_ON !== 1 || !s.elec.dcEss) {
-      emit({ type: 'radio', unit: 'SYS', msg: { ru: 'Радиостанция не работает: включите RMP 1 (нужно питание).', en: 'Radio dead: switch RMP 1 on (needs power).' } });
+    if (s.type === 'c172' ? s.c.busV < 20 || s.sw.C_AVIONICS1 !== 1 : s.sw.RMP_ON !== 1 || !s.elec.dcEss) {
+      emit({
+        type: 'radio',
+        unit: 'SYS',
+        msg: s.type === 'c172' ? { ru: 'Радио молчит: нужны MASTER и AVIONICS BUS 1.', en: 'Radio dead: needs MASTER and AVIONICS BUS 1.' } : { ru: 'Радиостанция не работает: включите RMP 1 (нужно питание).', en: 'Radio dead: switch RMP 1 on (needs power).' },
+      });
       return true;
     }
     if (unit !== need) {
@@ -88,8 +122,8 @@ export function comms(s: SimState, id: string, emit: Emit): boolean {
         type: 'radio',
         unit: 'SYS',
         msg: {
-          ru: `Нет ответа. Активная частота ${fq(s.radio.active)}, а ${need} — ${fq(SCN.freqs[need])}.`,
-          en: `No reply. Active frequency is ${fq(s.radio.active)}; ${need} is ${fq(SCN.freqs[need])}.`,
+          ru: `Нет ответа. Активная частота ${fq(s.type === 'c172' ? s.c.com : s.radio.active)}, а ${need} — ${fq(freqTable(s)[need])}.`,
+          en: `No reply. Active frequency is ${fq(s.type === 'c172' ? s.c.com : s.radio.active)}; ${need} is ${fq(freqTable(s)[need])}.`,
         },
       });
       return true;
@@ -275,6 +309,56 @@ export function comms(s: SimState, id: string, emit: Emit): boolean {
       me(s, emit, 'PA', { en: 'Attention, crew at stations! Attention, crew at stations!', ru: 'Внимание, экипажу по местам! Внимание, экипажу по местам!' });
       return true;
     }
+    // ------------------------- прилёт -------------------------
+    case 'arr_atis': {
+      if (noRadio('ATIS')) return false;
+      a.arrAtis = true;
+      say(s, emit, 'ATIS', {
+        en: `Orly information ${a.arrLetter}. ILS approach runway 06. Wind ${String(a.arrWindDir).padStart(3, '0')} degrees ${a.arrWindSpd} knots. Visibility 10 kilometres, broken 1800 feet. Temperature 9, dewpoint 5. QNH ${a.arrQnh}. Transition level 60.`,
+        ru: `Орли, информация ${a.arrLetter}. Заход ILS ВПП 06. Ветер ${String(a.arrWindDir).padStart(3, '0')}° ${a.arrWindSpd} уз. Видимость 10 км, облачность 1800 фт. Температура 9, точка росы 5. QNH ${a.arrQnh}. Эшелон перехода 60.`,
+      });
+      return true;
+    }
+    case 'app_est': {
+      if (noRadio('APP')) return false;
+      me(s, emit, 'APP', { en: `Orly Approach, ${cs}, established ILS 06.`, ru: `Орли-Подход, ${cs}, на курсе ILS 06.` });
+      if (!s.flags.locCap) {
+        say(s, emit, 'APP', { en: `${cs}, I don't see you on the localiser yet, report established.`, ru: `${cs}, вы ещё не на курсе, доложите на курсе.` }, 2.5);
+        return true;
+      }
+      s.flags.estReported = true;
+      say(s, emit, 'APP', { en: `${cs}, contact Orly Tower ${fq(SCN_ARR.freqs.TWR)}, good day.`, ru: `${cs}, работайте с Вышкой Орли ${fq(SCN_ARR.freqs.TWR)}, до свидания.` }, 2.5);
+      return true;
+    }
+    case 'twr_land': {
+      if (noRadio('TWR')) return false;
+      const d = ilsDev(s);
+      const nm = d ? Math.max(1, Math.round(d.dist / 1852)) : 5;
+      me(s, emit, 'TWR', { en: `Orly Tower, ${cs}, ILS 06, ${nm} miles.`, ru: `Орли-Вышка, ${cs}, ILS 06, ${nm} миль.` });
+      say(s, emit, 'TWR', { en: `${cs}, wind ${String(a.arrWindDir).padStart(3, '0')} degrees ${a.arrWindSpd} knots, runway 06 cleared to land.`, ru: `${cs}, ветер ${String(a.arrWindDir).padStart(3, '0')}° ${a.arrWindSpd} уз, ВПП 06, посадку разрешаю.` }, 2.5, 'ldgClear');
+      return true;
+    }
+    case 'gnd_taxiin': {
+      if (noRadio('GND')) return false;
+      me(s, emit, 'GND', { en: `Orly Ground, ${cs}, runway 06 vacated, request taxi to stand.`, ru: `Орли-Земля, ${cs}, ВПП 06 освободил, прошу руление на стоянку.` });
+      if (!s.ac.landed) return true;
+      say(s, emit, 'GND', { en: `${cs}, taxi to stand ${SCN_ARR.stand} via Whiskey and Mike.`, ru: `${cs}, руление на стоянку ${SCN_ARR.stand} по Виски и Майк.` }, 2.5, 'taxiIn');
+      return true;
+    }
+    case 'cab_land': {
+      if (!intercom()) return false;
+      me(s, emit, 'PA', { en: 'Cabin crew, prepare for landing.', ru: 'Бортпроводникам: приготовиться к посадке.' });
+      s.flags.cabLand = true;
+      if (!g.cabinReady) say(s, emit, 'CAB', { en: 'Cockpit, cabin is ready for landing.', ru: 'Кабина, салон к посадке готов.' }, 25, 'cabinReady');
+      return true;
+    }
+    case 'cab_disarm': {
+      if (!intercom()) return false;
+      me(s, emit, 'PA', { en: 'Cabin crew, disarm doors and cross-check.', ru: 'Бортпроводникам: двери на ручной режим, перекрёстная проверка.' });
+      say(s, emit, 'CAB', { en: 'Doors disarmed and cross-checked.', ru: 'Двери в ручном режиме, проверено.' }, 8, 'disarm');
+      if (s.sw.BEACON === 0) say(s, emit, 'CAB', { en: 'Opening door L1, passengers disembarking.', ru: 'Открываем дверь L1, пассажиры выходят.' }, 25, 'doorOpen');
+      return true;
+    }
     case 'cab_evac': {
       if (!intercom()) return false;
       s.flags.evacApplied = true;
@@ -336,6 +420,17 @@ export function updGround(s: SimState, dt: number, emit: Emit) {
     s.flags.toClrScheduled = true;
     say(s, emit, 'TWR', { en: `${SCN.callsign}, wind ${a.windDir} degrees ${a.windSpd} knots, runway 32L cleared for take-off.`, ru: `${SCN.callsign}, ветер ${a.windDir}° ${a.windSpd} уз, ВПП 32L, взлёт разрешаю.` }, 7, 'takeoff');
   }
+  // ---------- прилёт ----------
+  if (s.type === 'a320' && s.ac.landed) {
+    if (!s.flags.vacateMsg && s.ac.ias < 60) {
+      s.flags.vacateMsg = true;
+      say(s, emit, 'TWR', { en: `${SCN.callsign}, vacate via first right when able, contact Ground ${fq(SCN_ARR.freqs.GND)}.`, ru: `${SCN.callsign}, освобождайте по первой направо, работайте с Землёй ${fq(SCN_ARR.freqs.GND)}.` }, 1);
+    }
+    if (g.phase === 'parked' && !g.chocks && s.eng.every((e) => e.n2 < 12) && s.sw.BEACON === 0 && !s.flags.chocksMsg) {
+      s.flags.chocksMsg = true;
+      say(s, emit, 'CREW', { en: 'Cockpit, ground: chocks in place, ground power is available if you need it.', ru: 'Кабина, земля: колодки установлены, наземное питание есть по запросу.' }, 6, 'chocks');
+    }
+  }
   // отложенные сообщения
   if (a.pending.length) {
     const due = a.pending.filter((p) => p.at <= s.t);
@@ -370,6 +465,14 @@ export function updFailures(s: SimState, dt: number, emit: Emit) {
         e.fireOut = true;
         emit({ type: 'fireOut', eng: i + 1 });
       }
+    }
+  }
+  if (s.flags.engFailAppPending && s.leg === 'arr' && !s.ac.onGround) {
+    const d = ilsDev(s);
+    if (d && d.dist < 10 * 1852) {
+      s.flags.engFailAppPending = false;
+      s.eng[0].failed = true;
+      emit({ type: 'failure', id: 'engFailApp', eng: 1 });
     }
   }
   const spd = s.flags.toEngFailSpd as number | undefined;

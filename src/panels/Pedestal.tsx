@@ -6,7 +6,8 @@ import { SD } from '../displays/SD';
 import { UI } from '../i18n/ui';
 import { TLA, thrustLimits } from '../sim/engines';
 import { freqStr } from '../sim/ground';
-import { SCN } from '../sim/scenario';
+import { GEO_LFPO, SCN, SCN_ARR } from '../sim/scenario';
+import { speeds } from '../sim/flight';
 import { sim } from '../sim/sim';
 import { useSim, useSimFrame, useT } from '../ui/hooks';
 import { Ecp } from './Front';
@@ -179,6 +180,19 @@ function ParkBrake() {
   );
 }
 
+function GravityCrank() {
+  const turns = useSim((s) => (s.flags.gravityCrank as number) ?? 0);
+  return (
+    <Wrap id="GRAVITY_CRANK" className="crankw">
+      <div className="pb-label">GRVTY GEAR EXTN</div>
+      <div className="crank" onClick={() => sim.press('GRAVITY_CRANK')}>
+        <div className="crank-arm" style={{ transform: `rotate(${Math.min(3, turns) * 120}deg)` }} />
+      </div>
+      <div className="crank-n">{Math.min(3, turns)}/3 ↻</div>
+    </Wrap>
+  );
+}
+
 function Master({ n }: { n: 1 | 2 }) {
   const id = `ENG${n}_MASTER`;
   const v = useSim((s) => s.sw[id]);
@@ -288,10 +302,44 @@ function WxPanel() {
   );
 }
 
+function ArrCard() {
+  const s = useSimFrame(2);
+  const t = useT();
+  const a = s.atc;
+  const sp = speeds(s);
+  return (
+    <div className="paper" style={{ left: 1160, top: 405, width: 420, height: 540 }}>
+      <div className="paper-clip" />
+      <div className="paper-h">{t({ ru: 'Брифинг захода', en: 'Approach briefing' })}</div>
+      <pre>
+        {`LFPO PARIS ORLY   ELEV ${GEO_LFPO.elev} FT
+ILS RWY ${SCN_ARR.rwy}   ${SCN_ARR.ils}   CRS ${GEO_LFPO.rwyHdg}°
+GS 3.0°   DA ${SCN_ARR.da} FT (BARO)
+RWY ${GEO_LFPO.rwyLen} M   EXIT W5 / W7
+MISSED APPR: CLIMB RWY HDG 4000 FT
+
+LDG CONF FULL   AUTO BRK LO/MED
+VLS ${Math.round(sp.vlsFull)}   VAPP ${Math.round(sp.vapp)}   GW ${(s.ac.gw / 1000).toFixed(1)} T
+STAND ${SCN_ARR.stand}`}
+      </pre>
+      <div className="paper-h">{t(UI.freqs)}</div>
+      <pre>{`ATIS ${freqStr(SCN_ARR.freqs.ATIS)}   APP ${freqStr(SCN_ARR.freqs.APP)}
+TWR  ${freqStr(SCN_ARR.freqs.TWR)}   GND ${freqStr(SCN_ARR.freqs.GND)}`}</pre>
+      <div className="paper-h">ATIS / ATC</div>
+      <pre className="hand">
+        {(a.arrAtis ? `INFO ${a.arrLetter}  ${a.arrWindDir}/${String(a.arrWindSpd).padStart(2, '0')}  Q${a.arrQnh}  TL60` : `ATIS — ${t(UI.notYet)}`) +
+          '\n' +
+          (a.ldgClear ? `CLRD TO LAND RWY ${SCN_ARR.rwy}` : a.appClear ? `CLRD ILS ${SCN_ARR.rwy}` : '')}
+      </pre>
+    </div>
+  );
+}
+
 function Loadsheet() {
   const s = useSimFrame(2);
   const t = useT();
   const a = s.atc;
+  if (s.leg === 'arr') return <ArrCard />;
   return (
     <div className="paper" style={{ left: 1160, top: 405, width: 420, height: 540 }}>
       <div className="paper-clip" />
@@ -351,6 +399,7 @@ export function Pedestal() {
           <div className="col" style={{ gap: 14, alignItems: 'center' }}>
             <ParkBrake />
             <RudTrim />
+            <GravityCrank />
           </div>
         </Row>
       </Mod>

@@ -77,6 +77,11 @@ export const UI = d({
   paused: { ru: 'ПАУЗА', en: 'PAUSED' },
   taxiMap: { ru: 'EFB — схема аэродрома', en: 'EFB — airport map' },
   toHold: { ru: 'до предв. старта', en: 'to holding point' },
+  toStand: { ru: 'до стоянки', en: 'to stand' },
+  out: { ru: 'Вид наружу', en: 'Outside' },
+  c172: { ru: 'Кабина', en: 'Cockpit' },
+  walk: { ru: 'Осмотр снаружи', en: 'Walk-around' },
+  qrh: { ru: 'QRH', en: 'QRH' },
   disclaimer: {
     ru: 'Учебная игра. Аэропорты настоящие, но схемы, точки и частоты упрощены. Не для реальной эксплуатации.',
     en: 'Training game. Airports are real; SIDs, waypoints and frequencies are simplified. Not for real-world use.',
@@ -90,8 +95,8 @@ export const UI = d({
   finish: { ru: 'Завершить', en: 'Finish' },
 });
 
-export const KEYS_HELP: { k: string; d: L }[] = [
-  { k: '1 / 2 / 3', d: { ru: 'Верхний пульт / приборная доска / центральный пульт', en: 'Overhead / main panel / pedestal' } },
+export const KEYS_HELP_A320: { k: string; d: L }[] = [
+  { k: '1 / 2 / 3 / 4', d: { ru: 'Верхний пульт / приборная доска / центральный пульт / вид наружу', en: 'Overhead / main panel / pedestal / outside view' } },
   { k: 'F1', d: { ru: 'РУД — малый газ (IDLE)', en: 'Thrust levers IDLE' } },
   { k: 'F2 / PgDn', d: { ru: 'РУД назад (ниже IDLE на земле — реверс)', en: 'Thrust back (below IDLE on ground — reverse)' } },
   { k: 'F3 / PgUp', d: { ru: 'РУД вперёд (останавливается на CL, FLX, TOGA)', en: 'Thrust forward (stops at CL, FLX, TOGA)' } },
@@ -101,7 +106,27 @@ export const KEYS_HELP: { k: string; d: L }[] = [
   { k: 'B', d: { ru: 'Тормоза (держать)', en: 'Brakes (hold)' } },
   { k: 'P', d: { ru: 'Стояночный тормоз', en: 'Parking brake' } },
   { k: 'G', d: { ru: 'Рычаг шасси', en: 'Gear lever' } },
+  { k: 'F / R', d: { ru: 'Закрылки: выпустить / убрать на одну позицию', en: 'Flaps: one step down / up' } },
+  { k: 'Q', d: { ru: 'Книга QRH', en: 'QRH book' } },
   { k: 'Space', d: { ru: 'Пауза', en: 'Pause' } },
   { k: 'ЛКМ / ПКМ / колесо', d: { ru: 'Кнопки, тумблеры, ручки: левая/правая половина или колесо мыши', en: 'Buttons/switches/knobs: left/right half click or mouse wheel' } },
   { k: 'MCDU', d: { ru: 'Наведите курсор на MCDU и печатайте с клавиатуры (Backspace = CLR)', en: 'Hover the MCDU and type on your keyboard (Backspace = CLR)' } },
 ];
+
+export const KEYS_HELP_C172: { k: string; d: L }[] = [
+  { k: '1 / 2 / 3', d: { ru: 'Осмотр снаружи / кабина / вид наружу', en: 'Walk-around / cockpit / outside view' } },
+  { k: 'F1 / F4', d: { ru: 'РУД — малый газ / полный газ', en: 'Throttle idle / full' } },
+  { k: 'F2 F3 / PgDn PgUp', d: { ru: 'РУД меньше / больше', en: 'Throttle back / forward' } },
+  { k: 'Shift + F2 / F3', d: { ru: 'Смесь беднее / богаче', en: 'Mixture lean / rich' } },
+  { k: '↑ ↓ ← → / W S A D', d: { ru: 'Штурвал (↓/S — на себя)', en: 'Yoke (↓/S — pull)' } },
+  { k: '[ / ]', d: { ru: 'Триммер: нос вниз / вверх', en: 'Trim: nose down / up' } },
+  { k: 'Z / X', d: { ru: 'Педали (руление на земле)', en: 'Rudder pedals (steering on ground)' } },
+  { k: 'F / R', d: { ru: 'Закрылки: выпустить / убрать на одну позицию', en: 'Flaps: one step down / up' } },
+  { k: 'B', d: { ru: 'Тормоза (держать)', en: 'Brakes (hold)' } },
+  { k: 'P', d: { ru: 'Стояночный тормоз', en: 'Parking brake' } },
+  { k: 'Q', d: { ru: 'Книга QRH / POH', en: 'QRH / POH book' } },
+  { k: 'Space', d: { ru: 'Пауза', en: 'Pause' } },
+];
+
+export const KEYS_HELP = KEYS_HELP_A320;
+export const keysHelp = (type: 'a320' | 'c172') => (type === 'c172' ? KEYS_HELP_C172 : KEYS_HELP_A320);

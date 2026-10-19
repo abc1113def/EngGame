@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { FcuKnob, Mod, Pb, Rotary, Row, Toggle, Wrap } from '../controls/Controls';
 import { EWD } from '../displays/EWD';
 import { ISIS } from '../displays/ISIS';
@@ -7,7 +7,6 @@ import { PFD } from '../displays/PFD';
 import { SD } from '../displays/SD';
 import { UI } from '../i18n/ui';
 import { KT } from '../sim/flight';
-import { GEO, SCN } from '../sim/scenario';
 import { sim } from '../sim/sim';
 import { useSim, useSimFrame, useT } from '../ui/hooks';
 
@@ -342,39 +341,74 @@ function Clock() {
 }
 
 // ============================ EFB: схема аэродрома ============================
+export function recipRwy(id: string) {
+  const n = parseInt(id, 10);
+  const suf = id.replace(/^\d+/, '');
+  const r = ((n + 17) % 36) + 1;
+  return String(r).padStart(2, '0') + (suf === 'L' ? 'R' : suf === 'R' ? 'L' : suf);
+}
+
 function Efb() {
   const s = useSimFrame(10);
   const t = useT();
+  const G = s.geo;
   // схема: ось ВПП горизонтально, перпендикуляр растянут для читаемости
+  const fr = useMemo(() => {
+    const pts = [G.stand, ...(G.pushEnd ? [G.pushEnd] : []), ...G.taxi, ...G.exits.flatMap((e) => e.path)];
+    let sMax = 60;
+    for (const p of pts) sMax = Math.max(sMax, (p.x - G.thr.x) * G.side.x + (p.y - G.thr.y) * G.side.y);
+    return { ka: 314 / G.rwyLen, ks: Math.min(0.4, 140 / sMax) };
+  }, [G]);
   const toScr = (x: number, y: number) => {
-    const along = x * GEO.rwyDir.x + y * GEO.rwyDir.y;
-    const side = x * GEO.rwyDir.y - y * GEO.rwyDir.x;
-    return [18 + along * 0.098, 58 + side * 0.36];
+    const along = (x - G.thr.x) * G.rwyDir.x + (y - G.thr.y) * G.rwyDir.y;
+    const side = (x - G.thr.x) * G.side.x + (y - G.thr.y) * G.side.y;
+    return [18 + along * fr.ka, 58 + side * fr.ks];
   };
-  const thr = toScr(GEO.thr.x, GEO.thr.y);
-  const end = toScr(GEO.thr.x + GEO.rwyDir.x * SCN.rwyLen, GEO.thr.y + GEO.rwyDir.y * SCN.rwyLen);
-  const path = [GEO.stand, GEO.pushEnd, ...GEO.taxi.slice(1), ...GEO.lineup.slice(1)].map((p) => toScr(p.x, p.y).join(',')).join(' ');
-  const hp = toScr(GEO.taxi[GEO.taxi.length - 1].x, GEO.taxi[GEO.taxi.length - 1].y);
+  const thr = toScr(G.thr.x, G.thr.y);
+  const end = toScr(G.thr.x + G.rwyDir.x * G.rwyLen, G.thr.y + G.rwyDir.y * G.rwyLen);
+  const pl = (pts: { x: number; y: number }[]) => pts.map((p) => toScr(p.x, p.y).join(',')).join(' ');
+  const dep = s.leg === 'dep';
+  const depPath = dep ? [G.stand, ...(G.pushEnd ? [G.pushEnd] : []), ...G.taxi.slice(1), ...G.lineup.slice(1)] : [];
+  const hp = G.taxi.length ? toScr(G.taxi[G.taxi.length - 1].x, G.taxi[G.taxi.length - 1].y) : null;
+  const st = toScr(G.stand.x, G.stand.y);
   const [ax, ay] = toScr(s.ac.x, s.ac.y);
-  const hdgScr = 90 + s.ac.hdg - 323;
+  const hdgScr = 90 + s.ac.hdg - G.rwyHdg;
   const gs = Math.abs(s.ac.gs * KT);
-  const showDist = s.gnd.phase === 'taxi' || s.gnd.phase === 'holding' || s.gnd.phase === 'pushdone';
+  const ph = s.gnd.phase;
+  const showDist = ph === 'taxi' || ph === 'holding' || ph === 'pushdone';
+  const onRwy = ph === 'runway' || (ph === 'airborne' && s.ac.onGround);
+  const sw = Math.max(6, Math.min(14, G.rwyWidth * fr.ks));
+  const standName = s.type === 'c172' ? 'APRON' : dep ? 'STAND 12' : 'STAND K24';
   return (
-    <Mod x={1230} y={660} w={350} h={280} title={t(UI.taxiMap)} className="efb">
+    <Mod x={1230} y={660} w={350} h={280} title={`${t(UI.taxiMap)} · ${G.icao}`} className="efb">
       <svg viewBox="0 0 350 250" width={350} height={232} style={{ marginTop: -4 }}>
         <rect x={0} y={0} width={350} height={250} fill="#1d2329" />
-        <line x1={thr[0]} y1={thr[1]} x2={end[0]} y2={end[1]} stroke="#55606a" strokeWidth={14} />
+        {G.aprons.map((a, i) => (
+          <polygon key={i} points={pl(a)} fill="#2a333b" />
+        ))}
+        <line x1={thr[0]} y1={thr[1]} x2={end[0]} y2={end[1]} stroke="#55606a" strokeWidth={sw} />
         <line x1={thr[0]} y1={thr[1]} x2={end[0]} y2={end[1]} stroke="#fff" strokeWidth={1} strokeDasharray="6 6" />
-        <text x={thr[0] + 2} y={thr[1] - 10} fill="#fff" fontSize={10}>
-          32L
+        <text x={thr[0] + 2} y={thr[1] - sw / 2 - 3} fill="#fff" fontSize={10}>
+          {G.rwyId}
         </text>
-        <text x={end[0] - 26} y={end[1] - 10} fill="#fff" fontSize={10}>
-          14R
+        <text x={end[0] - 22} y={end[1] - sw / 2 - 3} fill="#fff" fontSize={10}>
+          {recipRwy(G.rwyId)}
         </text>
-        <polyline points={path} fill="none" stroke="#e8c547" strokeWidth={2} opacity={0.75} />
-        <line x1={hp[0] - 8} y1={hp[1] - 4} x2={hp[0] + 8} y2={hp[1] + 4} stroke="#ff4d4d" strokeWidth={3} />
-        <text x={hp[0] + 8} y={hp[1] + 14} fill="#ff8080" fontSize={9}>
-          HOLD 32L
+        {G.exits.map((e, i) => (
+          <polyline key={i} points={pl(e.path)} fill="none" stroke={!dep && s.ac.exit === i ? '#e8c547' : '#4a5560'} strokeWidth={2} opacity={0.85} />
+        ))}
+        {dep && <polyline points={pl(depPath)} fill="none" stroke="#e8c547" strokeWidth={2} opacity={0.75} />}
+        {dep && hp && (
+          <>
+            <line x1={hp[0] - 8} y1={hp[1] - 4} x2={hp[0] + 8} y2={hp[1] + 4} stroke="#ff4d4d" strokeWidth={3} />
+            <text x={hp[0] + 8} y={hp[1] + 14} fill="#ff8080" fontSize={9}>
+              HOLD {G.rwyId}
+            </text>
+          </>
+        )}
+        <rect x={st[0] - 4} y={st[1] - 4} width={8} height={8} fill="none" stroke="#6fdc6f" strokeWidth={1.5} />
+        <text x={st[0] + 7} y={st[1] + 4} fill="#8c8" fontSize={9}>
+          {standName}
         </text>
         <g transform={`translate(${ax},${ay}) rotate(${hdgScr})`}>
           <path d="M0,-9 L5,6 L0,3 L-5,6 Z" fill="#4fd1ff" stroke="#000" strokeWidth={0.8} />
@@ -383,21 +417,23 @@ function Efb() {
           GS {gs.toFixed(0)} KT
         </text>
         <text x={8} y={216} fill="#ccc" fontSize={11}>
-          {s.gnd.phase.toUpperCase()}
+          {ph.toUpperCase()}
         </text>
         {showDist && (
           <text x={8} y={232} fill={s.gnd.taxiPath < 80 ? '#ff8080' : '#ccc'} fontSize={12}>
             {Math.max(0, Math.round(s.gnd.taxiPath))} m {t(UI.toHold)}
           </text>
         )}
-        {s.gnd.phase === 'runway' && (
-          <text x={8} y={232} fill="#ccc" fontSize={12}>
-            RWY {Math.max(0, Math.round(SCN.rwyLen - s.ac.dist))} m
+        {ph === 'taxiin' && (
+          <text x={8} y={232} fill={s.gnd.taxiPath < 40 ? '#ffd27a' : '#ccc'} fontSize={12}>
+            {Math.max(0, Math.round(s.gnd.taxiPath))} m {t(UI.toStand)}
           </text>
         )}
-        <text x={300} y={200} fill="#888" fontSize={9}>
-          STAND 12
-        </text>
+        {onRwy && (
+          <text x={8} y={232} fill="#ccc" fontSize={12}>
+            RWY {Math.max(0, Math.round(G.rwyLen - s.ac.dist))} m
+          </text>
+        )}
       </svg>
     </Mod>
   );

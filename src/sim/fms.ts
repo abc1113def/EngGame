@@ -53,6 +53,7 @@ function thsStr(v: number | null) {
 export function fplnLegs(s: SimState): { id: string; kind: 'dep' | 'sid' | 'rte' | 'dest' }[] {
   const f = s.fms;
   if (!f.from) return [];
+  if (f.arr) return [{ id: 'CI06', kind: 'rte' }, { id: 'FF06', kind: 'rte' }, { id: 'RW06', kind: 'rte' }, { id: 'MA06', kind: 'rte' }, { id: 'LFPO06', kind: 'dest' }];
   const out: { id: string; kind: 'dep' | 'sid' | 'rte' | 'dest' }[] = [{ id: f.from + (f.rwy || ''), kind: 'dep' }];
   if (f.sid) for (const x of DEP_SID_LEGS[f.sid] ?? []) out.push({ id: x, kind: 'sid' });
   for (const x of f.route) if (x !== f.to && !out.some((o) => o.id === x)) out.push({ id: x, kind: 'rte' });
@@ -86,6 +87,8 @@ export function renderMcdu(s: SimState): McduPage {
       return dep(s);
     case 'PERF':
       return perf(s);
+    case 'PERFAPPR':
+      return perfAppr(s);
     case 'PROG':
       return {
         title: [g(s.ac.onGround ? 'TAKE OFF ' : 'CLB '), w(SCN.callsign)],
@@ -246,6 +249,23 @@ function dep(s: SimState): McduPage {
   return { title: [w('DEPARTURES FROM '), g(f.from)], rows, arrowsLR: true };
 }
 
+function perfAppr(s: SimState): McduPage {
+  const f = s.fms;
+  const sp = speeds(s);
+  const n = (x: number | null, boxes: number) => (x != null ? b(String(x)) : box(boxes));
+  return {
+    title: [g('APPR', false)],
+    rows: [
+      [{ l: [w('QNH')], c: [w('FLP RETR')], r: [w('FINAL')] }, { l: [n(f.qnhAppr, 4)], c: [w('F='), g(String(sp.F))], r: [g(f.appr || '----')] }],
+      [{ l: [w('TEMP')], c: [w('SLT RETR')], r: [w('BARO')] }, { l: [f.tempAppr != null ? b(`${f.tempAppr}°`) : b('---°')], c: [w('S='), g(String(sp.S))], r: [f.mda != null ? b(String(f.mda)) : b('[    ]')] }],
+      [{ l: [w('MAG WIND')], c: [w('CLEAN')], r: [w('RADIO')] }, { l: [b(f.windAppr || '---°/---')], c: [w('O='), g(String(sp.GD))], r: [f.dh != null ? b(String(f.dh)) : b('[   ]')] }],
+      [{ l: [w('TRANS FL')], r: [w('LDG CONF  ')] }, { l: [b('FL060')], r: [f.ldgConf === 3 ? b('CONF3*') : w('CONF3*')] }],
+      [{ l: [w('VAPP')], c: [w('VLS')] }, { l: [b(String(sp.vapp))], c: [g(String(f.ldgConf === 4 ? sp.vlsFull : sp.vlsConf3))], r: [f.ldgConf === 4 ? b('FULL*') : w('FULL*')] }],
+      [E, { l: [w('<PREV PHASE')], r: [w('NEXT PHASE>')] }],
+    ],
+  };
+}
+
 function perf(s: SimState): McduPage {
   const f = s.fms;
   const sp = speeds(s);
@@ -299,7 +319,7 @@ export function mcduKey(s: SimState, key: string, emit: Emit) {
   };
   if (pages[key]) {
     f.page = pages[key];
-    if (key === 'INIT') f.page = 'INIT';
+    if (key === 'PERF' && f.arr) f.page = 'PERFAPPR';
     return;
   }
   switch (key) {
@@ -488,6 +508,10 @@ export function mcduLsk(s: SimState, side: 'L' | 'R', i: number, emit: Emit) {
       return;
     }
     case 'PERF': {
+      if (k === '6R' && f.arr) {
+        f.page = 'PERFAPPR';
+        return;
+      }
       const sp3 = (x: string) => {
         const n = num(x);
         if (n == null || !Number.isInteger(n)) return 'fmt';
@@ -545,6 +569,63 @@ export function mcduLsk(s: SimState, side: 'L' | 'R', i: number, emit: Emit) {
         if (m2[1]) f.thrRed = parseInt(m2[1], 10);
         if (m2[2]) f.accAlt = parseInt(m2[2], 10);
         return ok();
+      }
+      return err(MSG.na);
+    }
+    case 'PERFAPPR': {
+      if (k === '1L') {
+        const n = num(sp);
+        if (n == null || !Number.isInteger(n)) return err(MSG.fmt);
+        if (n < 940 || n > 1060) return err(MSG.range);
+        f.qnhAppr = n;
+        return ok();
+      }
+      if (k === '2L') {
+        const n = num(sp);
+        if (n == null) return err(MSG.fmt);
+        f.tempAppr = Math.round(n);
+        return ok();
+      }
+      if (k === '3L') {
+        if (!/^\d{1,3}\/\d{1,3}$/.test(sp)) return err(MSG.fmt);
+        f.windAppr = sp.split('/').map((x, i) => (i === 0 ? x.padStart(3, '0') + '°' : x)).join('/');
+        return ok();
+      }
+      if (k === '2R') {
+        if (clr) {
+          f.mda = null;
+          return ok();
+        }
+        const n = num(sp);
+        if (n == null || !Number.isInteger(n)) return err(MSG.fmt);
+        if (n < s.elev || n > 5000) return err(MSG.range);
+        f.mda = n;
+        f.dh = null;
+        return ok();
+      }
+      if (k === '3R') {
+        if (clr) {
+          f.dh = null;
+          return ok();
+        }
+        const n = num(sp);
+        if (n == null || !Number.isInteger(n)) return err(MSG.fmt);
+        if (n < 0 || n > 1000) return err(MSG.range);
+        f.dh = n;
+        f.mda = null;
+        return ok();
+      }
+      if (k === '4R') {
+        f.ldgConf = 3;
+        return ok();
+      }
+      if (k === '5R') {
+        f.ldgConf = 4;
+        return ok();
+      }
+      if (k === '6L') {
+        f.page = 'PERF';
+        return;
       }
       return err(MSG.na);
     }

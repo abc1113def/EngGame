@@ -391,6 +391,10 @@ sel('PITCH_TRIM', 'ped', 'knob', 'PITCH TRIM', 'Колесо триммера с
 });
 sel('RUD_TRIM', 'ped', 'knob', 'RUD TRIM', 'Триммер руля направления', 'Rudder trim', [], 0);
 pb('RUD_TRIM_RESET', 'ped', 'RESET', 'Сброс триммера руля', 'Rudder trim reset', 0, undefined, undefined, undefined, 'pbm');
+pb('GRAVITY_CRANK', 'ped', 'GRVTY GEAR EXTN', 'Ручка аварийного выпуска шасси', 'Gravity gear extension crank', 0, undefined, undefined, {
+  ru: 'Аварийный выпуск: рычаг шасси UP, затем 3 оборота ручки по часовой (3 нажатия), затем рычаг DOWN.',
+  en: 'Gravity extension: gear lever UP, then 3 turns clockwise (3 presses), then lever DOWN.',
+}, 'pbm');
 sel('RMP_ON', 'ped', 'toggle', 'RMP 1', 'Радиопульт 1', 'Radio management panel 1', ['OFF', 'ON'], 0);
 pb('RMP_XFER', 'ped', '⇄', 'Обмен частот', 'Transfer frequency', 0, undefined, undefined, undefined, 'pbm');
 sel('RMP_KNOB', 'ped', 'knob', 'FREQ', 'Ручка частоты (внешняя — МГц, внутренняя — кГц)', 'Frequency knob', [], 0, {
