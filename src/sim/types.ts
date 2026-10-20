@@ -20,6 +20,8 @@ export interface Settings {
   guide?: boolean;
   /** чек-листы обязательны */
   checklists?: boolean;
+  /** экранный пульт управления открыт */
+  pad?: boolean;
 }
 
 export type IgnSel = '' | 'A' | 'B' | 'AB';

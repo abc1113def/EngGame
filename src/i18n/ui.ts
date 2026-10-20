@@ -103,12 +103,22 @@ export const UI = d({
   finish: { ru: 'Завершить', en: 'Finish' },
 });
 
+const KEYS_NOTE = {
+  k: '🎮',
+  d: {
+    ru: 'Клавиши работают в любой раскладке. Если не реагируют — щёлкните по игре мышью или откройте экранный пульт (кнопка 🎮 вверху или «Экранный пульт» под вкладками).',
+    en: 'Keys work in any keyboard layout. If they do not respond, click into the game or open the on-screen controls (🎮 at the top or "On-screen controls" under the tabs).',
+  },
+};
+
 export const KEYS_HELP_A320: { k: string; d: L }[] = [
+  KEYS_NOTE,
   { k: '1 / 2 / 3 / 4', d: { ru: 'Верхний пульт / приборная доска / центральный пульт / вид наружу', en: 'Overhead / main panel / pedestal / outside view' } },
-  { k: 'F1', d: { ru: 'РУД — малый газ (IDLE)', en: 'Thrust levers IDLE' } },
-  { k: 'F2 / PgDn', d: { ru: 'РУД назад (ниже IDLE на земле — реверс)', en: 'Thrust back (below IDLE on ground — reverse)' } },
-  { k: 'F3 / PgUp', d: { ru: 'РУД вперёд (останавливается на CL, FLX, TOGA)', en: 'Thrust forward (stops at CL, FLX, TOGA)' } },
-  { k: 'F4', d: { ru: 'РУД — TOGA', en: 'Thrust levers TOGA' } },
+  { k: 'F1 / Home', d: { ru: 'РУД — малый газ (IDLE)', en: 'Thrust levers IDLE' } },
+  { k: 'F2 / PgDn / −', d: { ru: 'РУД назад (ниже IDLE на земле — реверс)', en: 'Thrust back (below IDLE on ground — reverse)' } },
+  { k: 'F3 / PgUp / =', d: { ru: 'РУД вперёд (останавливается на CL, FLX, TOGA)', en: 'Thrust forward (stops at CL, FLX, TOGA)' } },
+  { k: 'F4 / End', d: { ru: 'РУД — TOGA', en: 'Thrust levers TOGA' } },
+  { k: '[ / ]', d: { ru: 'Триммер стабилизатора: нос вниз / вверх', en: 'Pitch trim: nose down / up' } },
   { k: '↑ ↓ ← → / W S A D', d: { ru: 'Ручка управления (↓/S — на себя)', en: 'Sidestick (↓/S — pull)' } },
   { k: 'Z / X', d: { ru: 'Педали руля направления', en: 'Rudder pedals' } },
   { k: 'B', d: { ru: 'Тормоза (держать)', en: 'Brakes (hold)' } },
@@ -122,10 +132,11 @@ export const KEYS_HELP_A320: { k: string; d: L }[] = [
 ];
 
 export const KEYS_HELP_C172: { k: string; d: L }[] = [
+  KEYS_NOTE,
   { k: '1 / 2 / 3', d: { ru: 'Осмотр снаружи / кабина / вид наружу', en: 'Walk-around / cockpit / outside view' } },
-  { k: 'F1 / F4', d: { ru: 'РУД — малый газ / полный газ', en: 'Throttle idle / full' } },
-  { k: 'F2 F3 / PgDn PgUp', d: { ru: 'РУД меньше / больше', en: 'Throttle back / forward' } },
-  { k: 'Shift + F2 / F3', d: { ru: 'Смесь беднее / богаче', en: 'Mixture lean / rich' } },
+  { k: 'F1 / F4 · Home / End', d: { ru: 'РУД — малый газ / полный газ', en: 'Throttle idle / full' } },
+  { k: 'F2 F3 · PgDn PgUp · − =', d: { ru: 'РУД меньше / больше', en: 'Throttle back / forward' } },
+  { k: 'Shift + F2 / F3 (или − / =)', d: { ru: 'Смесь беднее / богаче', en: 'Mixture lean / rich' } },
   { k: '↑ ↓ ← → / W S A D', d: { ru: 'Штурвал (↓/S — на себя)', en: 'Yoke (↓/S — pull)' } },
   { k: '[ / ]', d: { ru: 'Триммер: нос вниз / вверх', en: 'Trim: nose down / up' } },
   { k: 'Z / X', d: { ru: 'Педали (руление на земле)', en: 'Rudder pedals (steering on ground)' } },

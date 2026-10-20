@@ -4,7 +4,15 @@ import type { L, Lang, Settings, SimState } from '../sim/types';
 
 // ============================ настройки ============================
 const KEY = 'a320-cold-dark-settings';
-const defaults: Settings = { lang: 'ru', sound: true, volume: 0.7, failures: 'light', fastAlign: true, checklists: true };
+// на сенсорных экранах пульт открыт сразу
+const coarse = (() => {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches;
+  } catch {
+    return false;
+  }
+})();
+const defaults: Settings = { lang: 'ru', sound: true, volume: 0.7, failures: 'light', fastAlign: true, checklists: true, pad: coarse };
 
 function load(): Settings {
   try {

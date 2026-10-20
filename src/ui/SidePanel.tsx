@@ -9,6 +9,7 @@ import type { L, SimState } from '../sim/types';
 import { sim } from '../sim/sim';
 import { setSettings, useSim, useSimFrame, useT } from './hooks';
 import { useUiStore } from './store';
+import { ControlPad } from './ControlPad';
 
 export type Tab = 'steps' | 'comms' | 'checklists' | 'docs' | 'log';
 
@@ -555,6 +556,7 @@ export function SidePanel({ game, tab, setTab, onShow }: { game: Game; tab: Tab;
       {tab === 'checklists' && <ChecklistsTab game={game} />}
       {tab === 'docs' && <DocsTab />}
       {tab === 'log' && <LogTab />}
+      <ControlPad />
     </aside>
   );
 }

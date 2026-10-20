@@ -12,12 +12,12 @@ import { C172Panel } from '../panels/C172';
 import { Walkaround } from '../panels/Walk';
 import { QrhBook } from './Qrh';
 import { ECAM_BY_ID } from '../sim/ecam';
-import { TLA } from '../sim/engines';
 import { sim, type SimEvent } from '../sim/sim';
 import type { AircraftType, L, Scenario, ViewId } from '../sim/types';
 import { HlCtx, getSettings, setSettings, useSettings, useSim, useT, tr } from './hooks';
 import { Debrief, StartMenu, Tooltip } from './Menus';
 import { SidePanel, type Tab } from './SidePanel';
+import { doAction, hold, keyName, mcduChar, releaseAll, type HoldKey } from './actions';
 import { uiStore, useUiStore } from './store';
 
 const VIEW_H: Record<ViewId, number> = { ovhd: 1250, front: 960, ped: 960, out: 960, c172: 1000, walk: 900 };
@@ -335,9 +335,9 @@ export function App() {
     });
   }, []);
 
-  // клавиатура
+  // клавиатура (по физическим клавишам — раскладка не важна)
   useEffect(() => {
-    const keyMap: Record<string, string> = {
+    const keyMap: Record<string, HoldKey> = {
       ArrowDown: 'pitchUp',
       s: 'pitchUp',
       ArrowUp: 'pitchDn',
@@ -352,10 +352,11 @@ export function App() {
     };
     const down = (e: KeyboardEvent) => {
       if (menu || (e.target as HTMLElement)?.tagName === 'INPUT') return;
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      const k = keyName(e);
       if (mcduState.hover) {
-        if (/^[a-z0-9./]$/i.test(e.key)) {
-          sim.mcduKey(e.key.toUpperCase());
+        const ch = mcduChar(e);
+        if (ch) {
+          sim.mcduKey(ch);
           e.preventDefault();
           return;
         }
@@ -364,12 +365,12 @@ export function App() {
           e.preventDefault();
           return;
         }
-        if (e.key === ' ') {
+        if (k === ' ') {
           sim.mcduKey('SP');
           e.preventDefault();
           return;
         }
-        if (e.key === '-' || e.key === '+') {
+        if (k === '-' || k === '=') {
           sim.mcduKey('+/-');
           e.preventDefault();
           return;
@@ -377,40 +378,34 @@ export function App() {
       }
       const c172 = sim.s.type === 'c172';
       const vs = VIEWS[sim.s.type];
+      const dec = k === 'F2' || k === 'PageDown' || k === '-';
+      const inc = k === 'F3' || k === 'PageUp' || k === '=';
       if (/^[1-9]$/.test(k) && vs[+k - 1]) setView(vs[+k - 1]);
       else if (k === 'q') setQrh((q) => !q);
       else if (k === 'Escape') setQrh(false);
-      else if (c172 && e.shiftKey && (k === 'F2' || k === 'PageDown')) sim.setLever('C_MIX', sim.s.sw.C_MIX - 0.05);
-      else if (c172 && e.shiftKey && (k === 'F3' || k === 'PageUp')) sim.setLever('C_MIX', sim.s.sw.C_MIX + 0.05);
-      else if (c172 && k === 'F1') sim.setLever('C_THR', 0);
-      else if (c172 && (k === 'F2' || k === 'PageDown')) sim.setLever('C_THR', sim.s.sw.C_THR - 0.05);
-      else if (c172 && (k === 'F3' || k === 'PageUp')) sim.setLever('C_THR', sim.s.sw.C_THR + 0.05);
-      else if (c172 && k === 'F4') sim.setLever('C_THR', 1);
-      else if (c172 && k === '[') sim.knob('C_TRIM', -1);
-      else if (c172 && k === ']') sim.knob('C_TRIM', 1);
-      else if (c172 && k === 'p') sim.toggle('C_PARK');
-      else if (c172 && k === 'f') sim.setSw('C_FLAPS', sim.s.sw.C_FLAPS + 1);
-      else if (c172 && k === 'r') sim.setSw('C_FLAPS', sim.s.sw.C_FLAPS - 1);
-      else if (k === 'F1') sim.setThrust(TLA.IDLE);
-      else if (k === 'F2' || k === 'PageDown') sim.stepThrust(-1);
-      else if (k === 'F3' || k === 'PageUp') sim.stepThrust(1);
-      else if (k === 'F4') sim.setThrust(TLA.TOGA);
-      else if (k === 'p') sim.toggle('PARK_BRK');
-      else if (k === 'g') sim.toggle('GEAR');
-      else if (k === 'f') sim.setSw('FLAPS', sim.s.sw.FLAPS + 1);
-      else if (k === 'r') sim.setSw('FLAPS', sim.s.sw.FLAPS - 1);
+      else if (c172 && e.shiftKey && dec) doAction('mixDec');
+      else if (c172 && e.shiftKey && inc) doAction('mixInc');
+      else if (k === 'F1' || k === 'Home') doAction('thrIdle');
+      else if (dec) doAction('thrDec');
+      else if (inc) doAction('thrInc');
+      else if (k === 'F4' || k === 'End') doAction('thrMax');
+      else if (k === '[') doAction('trimDn');
+      else if (k === ']') doAction('trimUp');
+      else if (k === 'p') doAction('park');
+      else if (k === 'g' && !c172) doAction('gear');
+      else if (k === 'f') doAction('flapsExt');
+      else if (k === 'r') doAction('flapsRet');
       else if (k === ' ') togglePause();
-      else if (keyMap[k]) sim.s.keys[keyMap[k]] = true;
-      else return;
+      else if (keyMap[k]) {
+        if (!e.repeat) hold(keyMap[k], true);
+      } else return;
       e.preventDefault();
     };
     const up = (e: KeyboardEvent) => {
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (keyMap[k]) sim.s.keys[keyMap[k]] = false;
+      const k = keyName(e);
+      if (keyMap[k]) hold(keyMap[k], false);
     };
-    const blur = () => {
-      for (const k in sim.s.keys) sim.s.keys[k] = false;
-    };
+    const blur = () => releaseAll();
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     window.addEventListener('blur', blur);
@@ -473,6 +468,9 @@ export function App() {
               ))}
             </span>
             <button onClick={togglePause}>{paused ? '▶' : '❚❚'}</button>
+            <button className={settings.pad ? 'sel' : ''} onClick={() => setSettings({ pad: !settings.pad })} title={t({ ru: 'Экранный пульт: тяга, тормоза, закрылки, ручка', en: 'On-screen controls: thrust, brakes, flaps, stick' })}>
+              🎮
+            </button>
             <button className={qrh ? 'sel' : ''} onClick={() => setQrh(!qrh)} title="Q">
               📕 {type === 'c172' ? 'POH' : 'QRH'}
             </button>

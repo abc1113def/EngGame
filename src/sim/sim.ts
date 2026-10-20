@@ -479,11 +479,11 @@ export class Sim {
   }
 
   /** Рычаги РУД */
-  setThrust(v: number, which: 0 | 1 | 2 = 0) {
+  setThrust(v: number, which: 0 | 1 | 2 = 0, snap = true) {
     const s = this.s;
     v = clamp(v, s.ac.onGround ? TLA.REV : TLA.IDLE, TLA.TOGA);
-    // прилипание к фиксаторам
-    for (const d of DETENTS) if (Math.abs(v - d) < 1.2) v = d;
+    // прилипание к фиксаторам (при перетаскивании мышью)
+    if (snap) for (const d of DETENTS) if (Math.abs(v - d) < 1.2) v = d;
     if (which === 0 || which === 1) s.sw.TL1 = v;
     if (which === 0 || which === 2) s.sw.TL2 = v;
     this.emit({ type: 'thrust', v });
@@ -499,7 +499,8 @@ export class Sim {
     }
     if (!s.ac.onGround && v < 0) v = 0;
     const old = cur;
-    this.setThrust(v);
+    // шаг с клавиатуры/пульта: без «прилипания», иначе от IDLE рычаг не сдвинуть
+    this.setThrust(v, 0, false);
     if (DETENTS.includes(this.s.sw.TL1) && this.s.sw.TL1 !== old) this.ui('detent');
   }
 
