@@ -7,7 +7,7 @@ import { GEO_LFPO, SCN, SCN_ARR, SCN_C172 } from '../sim/scenario';
 import { speeds } from '../sim/flight';
 import type { L, SimState } from '../sim/types';
 import { sim } from '../sim/sim';
-import { useSim, useSimFrame, useT } from './hooks';
+import { setSettings, useSim, useSimFrame, useT } from './hooks';
 import { useUiStore } from './store';
 
 export type Tab = 'steps' | 'comms' | 'checklists' | 'docs' | 'log';
@@ -271,8 +271,26 @@ function CommsTab() {
 function ChecklistsTab({ game }: { game: Game }) {
   useGameVersion(game);
   const t = useT();
+  const can = game.canToggleChecklists();
+  const set = (v: boolean) => {
+    game.setChecklistsRequired(v);
+    setSettings({ checklists: v });
+  };
   return (
     <div className="tab-body">
+      <div className="cl-req">
+        <span>{t(UI.clReq)}:</span>
+        <div className="seg small" title={can ? '' : t(UI.clLocked)}>
+          <button className={game.clRequired ? 'sel' : ''} disabled={!can} onClick={() => set(true)}>
+            {t(UI.clReqShort)}
+          </button>
+          <button className={!game.clRequired ? 'sel' : ''} disabled={!can} onClick={() => set(false)}>
+            {t(UI.clOptShort)}
+          </button>
+        </div>
+      </div>
+      {!game.clRequired && <div className="note dim">{t(UI.clOptNote)}</div>}
+      {!can && game.mode === 'exam' && <div className="note dim">{t(UI.clLocked)}</div>}
       {game.checklists().map((cl) => {
         const marks = game.clMarks[cl.id] ?? {};
         const done = !!sim.s.flags[cl.flag];

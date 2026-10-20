@@ -94,6 +94,17 @@ export function StartMenu({ onStart }: { onStart: (mode: Mode, ac: AircraftType,
             ))}
           </div>
         </div>
+        <div className="menu-sec">
+          <div className="menu-h">{t(UI.clReq)}</div>
+          <div className="seg cl-seg">
+            <button className={st.checklists !== false ? 'sel' : ''} onClick={() => setSettings({ checklists: true })}>
+              ✓ {t(UI.clReqOn)}
+            </button>
+            <button className={st.checklists === false ? 'sel' : ''} onClick={() => setSettings({ checklists: false })}>
+              ◇ {t(UI.clReqOff)}
+            </button>
+          </div>
+        </div>
         <div className="menu-grid">
           <div className="menu-sec">
             <div className="menu-h">{t(UI.failures)}</div>
@@ -193,6 +204,10 @@ export function Debrief({ rep, mode, onAgain, onClose }: { rep: Report; mode: Mo
             <b>
               {mm}:{String(ss).padStart(2, '0')}
             </b>
+          </div>
+          <div>
+            <span>{t(UI.clReq)}</span>
+            <b>{t(rep.checklists ? UI.clReqShort : UI.clOptShort)}</b>
           </div>
           <div>
             <span>{t(UI.stepsDone)}</span>

@@ -8,12 +8,14 @@ import { sim } from '../src/sim/sim';
 import type { FailureLevel } from '../src/sim/types';
 
 declare const process: { argv: string[]; exit: (c: number) => never };
-const seed = Number(process.argv[2] ?? 3);
-const failures = (process.argv[3] ?? 'off') as FailureLevel;
+const seed = Number(process.argv[2] ?? 3) || 3;
+const failures = (['off', 'light', 'full'].includes(process.argv[3]) ? process.argv[3] : 'off') as FailureLevel;
 sim.reset(seed, failures, true, 'c172', 'pattern');
 const s = sim.s;
 const c = s.c;
-const game = new Game(sim, 'exam');
+// nocl — чек-листы необязательны и не выполняются
+const noCl = process.argv.includes('nocl');
+const game = new Game(sim, 'exam', { checklists: !noCl });
 game.start();
 sim.paused = false;
 console.log('failures:', s.failures.map((f) => f.id).join(', ') || 'none');
@@ -37,6 +39,7 @@ const pr = (id: string) => {
   sim.release(id);
 };
 const cl = (id: string) => {
+  if (noCl) return;
   const ch = game.checklists().find((x) => x.id === id)!;
   ch.items.forEach((_, i) => {
     if (!game.checkItem(id, i)) P('CL FAIL', id, ch.items[i].ch, ch.items[i].why.en);

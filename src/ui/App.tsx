@@ -84,6 +84,14 @@ function Toasts() {
   );
 }
 
+function ClBadge({ game }: { game: Game }) {
+  const t = useT();
+  useSettings();
+  const req = useSim(() => game.clRequired);
+  if (req) return null;
+  return <span className="badge nocl">{t(UI.clOffBadge)}</span>;
+}
+
 function Clock() {
   const t = useSim((s) => Math.floor(s.t));
   return (
@@ -304,7 +312,7 @@ export function App() {
     const st = getSettings();
     const seed = (Math.random() * 1e9) | 0;
     sim.reset(seed, st.failures, st.fastAlign, ac, scn);
-    const g = new Game(sim, mode);
+    const g = new Game(sim, mode, { checklists: st.checklists !== false });
     g.start();
     g.onEnd((r) => setTimeout(() => setReport(r), 1500));
     gameRef.current = g;
@@ -450,6 +458,7 @@ export function App() {
           </nav>
           <div className="tb-right">
             {game && <span className={`badge ${game.mode}`}>{t(game.mode === 'tutorial' ? UI.tutorial : UI.exam)}</span>}
+            {game && <ClBadge game={game} />}
             <Clock />
             {game?.mode === 'exam' && (
               <span>

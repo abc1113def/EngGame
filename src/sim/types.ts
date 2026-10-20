@@ -18,6 +18,8 @@ export interface Settings {
   failures: FailureLevel;
   fastAlign: boolean;
   guide?: boolean;
+  /** чек-листы обязательны */
+  checklists?: boolean;
 }
 
 export type IgnSel = '' | 'A' | 'B' | 'AB';

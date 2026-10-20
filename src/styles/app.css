@@ -2014,3 +2014,8 @@ table.keys td {
   .mission-cards { grid-template-columns: 1fr; }
   .mode-card.mission { min-height: 0; }
 }
+/* обязательность чек-листов */
+.cl-seg { display: flex; flex-wrap: wrap; }
+.cl-seg button { flex: 1 1 240px; text-align: left; }
+.cl-req { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.badge.nocl { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--border); }

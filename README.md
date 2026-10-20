@@ -13,6 +13,10 @@
 
 У каждого сценария два режима: обучение (подсветка и пояснения) и экзамен (очки и оценка).
 
+Чек-листы можно сделать необязательными: переключатель «Чек-листы» есть в меню перед стартом. Тогда шаги-чек-листы помечаются «по желанию», за пропуск и неверные ответы очки не снимаются, а подсказки обучения их пропускают.
+- В обучении режим можно переключить и во время игры, на вкладке «Чек-листы».
+- В экзамене — только до первого выполненного шага.
+
 ## Что внутри
 
 ### Общее
@@ -103,30 +107,27 @@ npm run preview      # посмотреть сборку: http://localhost:4173
 npm run build:single # результат — dist-single/index.html
 ```
 
-## Размещение на VPS (хватит 1 ядра и 1 ГБ ОЗУ)
+## Размещение на своём сервере
 
-Игра — статический сайт примерно на 700 КБ (около 200 КБ в gzip). Серверной логики нет, nginx отдаёт файлы и тратит на это примерно 5–10 МБ памяти. Собирать проект на сервере не нужно: соберите у себя и скопируйте папку `dist/`.
+Подробная пошаговая инструкция — в **[DEPLOY.md](DEPLOY.md)**. Там описаны четыре варианта:
+- сборка у себя и копирование на сервер;
+- сборка прямо на сервере;
+- один HTML-файл в уже существующий сайт;
+- Docker.
 
-1. На сервере (Ubuntu/Debian):
-   ```bash
-   sudo apt update && sudo apt install -y nginx
-   sudo mkdir -p /var/www/a320 && sudo chown $USER /var/www/a320
-   ```
-2. На своём компьютере:
-   ```bash
-   ./deploy/deploy.sh user@IP_СЕРВЕРА
-   ```
-   Можно и вручную: `npm run build`, затем скопировать содержимое `dist/` в `/var/www/a320`.
-3. Конфиг nginx:
-   ```bash
-   sudo cp deploy/nginx.conf /etc/nginx/sites-available/a320
-   sudo ln -s /etc/nginx/sites-available/a320 /etc/nginx/sites-enabled/a320
-   sudo rm -f /etc/nginx/sites-enabled/default
-   sudo nginx -t && sudo systemctl reload nginx
-   ```
-4. Откройте `http://IP_СЕРВЕРА`. Для HTTPS с доменом: `sudo apt install certbot python3-certbot-nginx && sudo certbot --nginx`.
+Ещё в DEPLOY.md есть HTTPS, подпапка на чужом сайте и разбор частых ошибок.
 
-Вариант с Docker: `docker build -t a320 . && docker run -d -p 80:80 --restart unless-stopped a320`. Сборку внутри Docker на 1 ГБ ОЗУ лучше не делать. Соберите образ у себя и перенесите его через `docker save` и `docker load`.
+Коротко, для Ubuntu/Debian:
+
+```bash
+# на сервере: nginx, папка /var/www/a320, конфиг сайта, firewall
+scp deploy/server-setup.sh user@IP_СЕРВЕРА:~/ && ssh user@IP_СЕРВЕРА 'sudo bash server-setup.sh'
+# на своём компьютере (Linux/macOS): сборка и копирование
+./deploy/deploy.sh user@IP_СЕРВЕРА
+# Windows: powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1 user@IP_СЕРВЕРА
+```
+
+Хватит 1 ядра и 1 ГБ ОЗУ: nginx отдаёт файлы, тратя 5–10 МБ памяти. Сборка на самом сервере тоже проходит, её пик — около 300 МБ.
 
 ## Управление
 
@@ -219,5 +220,7 @@ npm run build:single # результат — dist-single/index.html
 - `src/audio/` — процедурный звук.
 - `npm run selftest` — «роботы-пилоты» проходят три сценария без браузера: вылет A320, прилёт A320 и круг на Cessna. Отдельно:
   - `npx tsx scripts/selftest.ts [seed] [off|light|full]`
-  - `npx tsx scripts/arrtest.ts [manual]`
-  - `npx tsx scripts/c172test.ts [seed] [off|light|full]`
+  - `npx tsx scripts/arrtest.ts [manual] [nocl]`
+  - `npx tsx scripts/c172test.ts [seed] [off|light|full] [nocl]`
+
+  `nocl` — прогон с необязательными чек-листами (робот их не выполняет).

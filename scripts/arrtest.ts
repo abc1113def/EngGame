@@ -9,7 +9,9 @@ const manual = process.argv.includes('manual');
 const scn = process.argv.includes('full') ? 'full' : 'arr';
 sim.reset(5, 'off', true, 'a320', 'arr');
 const s = sim.s;
-const game = new Game(sim, 'exam');
+// nocl — чек-листы необязательны и не выполняются
+const noCl = process.argv.includes('nocl');
+const game = new Game(sim, 'exam', { checklists: !noCl });
 game.start();
 sim.paused = false;
 const P = (...a: unknown[]) => console.log(`[${s.t.toFixed(0).padStart(4)}]`, ...a);
@@ -32,6 +34,7 @@ const pr = (id: string) => {
   sim.release(id);
 };
 const cl = (id: string) => {
+  if (noCl) return;
   const c = game.checklists().find((x) => x.id === id)!;
   c.items.forEach((_, i) => {
     if (!game.checkItem(id, i)) P('CL FAIL', id, c.items[i].ch, c.items[i].why.en);

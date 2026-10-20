@@ -4,7 +4,7 @@ import type { L, Lang, Settings, SimState } from '../sim/types';
 
 // ============================ настройки ============================
 const KEY = 'a320-cold-dark-settings';
-const defaults: Settings = { lang: 'ru', sound: true, volume: 0.7, failures: 'light', fastAlign: true };
+const defaults: Settings = { lang: 'ru', sound: true, volume: 0.7, failures: 'light', fastAlign: true, checklists: true };
 
 function load(): Settings {
   try {

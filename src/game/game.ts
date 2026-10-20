@@ -22,6 +22,12 @@ export interface Report {
   done: number;
   total: number;
   missed: string[];
+  checklists: boolean;
+}
+
+export interface GameOptions {
+  /** чек-листы обязательны (иначе — по желанию, без штрафов) */
+  checklists?: boolean;
 }
 
 const r = (ru: string, en: string): L => ({ ru, en });
@@ -45,12 +51,35 @@ export class Game {
   private unsub: (() => void)[] = [];
   private listeners = new Set<(r: Report) => void>();
 
+  /** чек-листы обязательны */
+  clRequired: boolean;
+
   constructor(
     public sim: Sim,
     public mode: Mode,
+    opts: GameOptions = {},
   ) {
-    this.steps = stepsFor(sim.s.type, sim.s.scn);
+    this.clRequired = opts.checklists ?? true;
+    this.steps = this.buildSteps();
     this.rules = rulesFor(sim.s.type);
+  }
+
+  /** Шаги сценария; без обязательных чек-листов шаги-чек-листы становятся необязательными */
+  private buildSteps(): Step[] {
+    const base = stepsFor(this.sim.s.type, this.sim.s.scn);
+    if (this.clRequired) return base;
+    return base.map((st) => (st.kind === 'checklist' ? { ...st, optional: true } : st));
+  }
+
+  /** Переключение обязательности чек-листов (в экзамене — только до первого выполненного шага) */
+  canToggleChecklists() {
+    return this.mode === 'tutorial' || Object.keys(this.doneAt).length === 0;
+  }
+  setChecklistsRequired(v: boolean) {
+    if (v === this.clRequired || !this.canToggleChecklists() || this.ended) return;
+    this.clRequired = v;
+    this.steps = this.buildSteps();
+    this.version++;
   }
 
   get s() {
@@ -187,7 +216,7 @@ export class Game {
     const ok = it.ok(this.s);
     this.clMarks[clId] = this.clMarks[clId] ?? {};
     this.clMarks[clId][idx] = ok ? 'ok' : 'bad';
-    if (!ok && this.mode === 'exam') this.pen(`cl_${clId}_${idx}`, 10, { ru: `Чек-лист ${cl.name}: «${it.ch}» — ${it.why.ru}`, en: `${cl.name} checklist: "${it.ch}" — ${it.why.en}` });
+    if (!ok && this.mode === 'exam' && this.clRequired) this.pen(`cl_${clId}_${idx}`, 10, { ru: `Чек-лист ${cl.name}: «${it.ch}» — ${it.why.ru}`, en: `${cl.name} checklist: "${it.ch}" — ${it.why.en}` });
     if (cl.items.every((_, i) => this.clMarks[clId][i] === 'ok')) {
       this.s.flags[cl.flag] = true;
       this.sim.emit({ type: 'checklistDone', id: clId });
@@ -243,7 +272,7 @@ export class Game {
     const missed = partial ? [] : vis.filter((x) => !x.optional && !this.isDone(x.id) && x.phase !== 'emer' && !(x.kind === 'check' && this.mode === 'tutorial' && x.done(s))).map((x) => x.id);
     const score = this.score;
     const grade = res === 'fail' ? r('2 — неудовлетворительно', 'F — fail') : score >= 950 ? r('5 — отлично', 'A — excellent') : score >= 850 ? r('4 — хорошо', 'B — good') : score >= 700 ? r('3 — удовлетворительно', 'C — satisfactory') : r('2 — неудовлетворительно', 'F — fail');
-    this.report = { result: res, reason, score, max: 1000, grade, items: this.items, time: s.t, done, total, missed };
+    this.report = { result: res, reason, score, max: 1000, grade, items: this.items, time: s.t, done, total, missed, checklists: this.clRequired };
     for (const f of this.listeners) f(this.report);
     this.version++;
     return this.report;
